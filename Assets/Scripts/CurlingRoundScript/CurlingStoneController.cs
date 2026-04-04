@@ -16,10 +16,19 @@ public class CurlingStoneController : MonoBehaviour
     [Header("Curl")]
     public float maxCurlPower = 5f;
     public float curlChangeSpeed = 3f;
-    public float curlSideForce = 3f;  // lateral acceleration (m/s²) per curl unit
+    public float curlDegreesPerMeter = 0.4f; // heading degrees rotated per meter traveled per curl unit
+
+    [Header("Pre-shot Spin")]
+    public float preShotSpinSpeed = 2f;     // rad/s of Y-axis spin per curl unit
+    public float spinSpeedPerVelocity = 2f; // rad/s of Y spin per m/s of linear speed after launch
+
+    [Header("Aim Arrow")]
+    public GameObject aimArrow;
+    public float arrowYOffset = 0.05f;       // raise above the ice surface
+    public float arrowForwardOffset = 2f; // distance from stone centre along aim direction
 
     [Header("Physics")]
-    public float slideDrag = 0.4f;     // drag applied once the stone is shot
+    public float slideDrag = 0.001f;     // drag applied once the stone is shot
     public float stopThreshold = 0.05f;
 
     private Rigidbody rb;
@@ -31,6 +40,9 @@ public class CurlingStoneController : MonoBehaviour
     private float curlLeft  = 0f;
     private float curlRight = 0f;
     private bool  shootPending = false;
+    private Quaternion arrowBaseRotation;
+    private float launchAngVelY  = 0f;
+    private float launchSpeed    = 1f;
 
     public bool HasBeenShot  { get; private set; } = false;
     public bool ShotFinished { get; private set; } = false;
@@ -44,6 +56,10 @@ public class CurlingStoneController : MonoBehaviour
 
         rb.linearVelocity  = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
+        rb.constraints     = RigidbodyConstraints.FreezePosition;
+
+        if (aimArrow != null)
+            arrowBaseRotation = aimArrow.transform.rotation;
     }
 
     private void Update()
@@ -84,6 +100,18 @@ public class CurlingStoneController : MonoBehaviour
         // Space  →  queue shot for next FixedUpdate
         if (Keyboard.current.spaceKey.wasPressedThisFrame)
             shootPending = true;
+
+        // Keep the aim arrow aligned with the current aim angle
+        if (aimArrow != null)
+        {
+            Vector3 aimDir = Quaternion.Euler(0f, aimAngle, 0f) * Vector3.forward;
+            aimArrow.transform.position = new Vector3(
+                transform.position.x + aimDir.x * arrowForwardOffset,
+                transform.position.y + arrowYOffset,
+                transform.position.z + aimDir.z * arrowForwardOffset);
+            aimArrow.transform.rotation = Quaternion.LookRotation(Vector3.up, aimDir)
+                                        * Quaternion.Euler(0f, 0f, -90f);
+        }
     }
 
     private void FixedUpdate()
@@ -92,11 +120,17 @@ public class CurlingStoneController : MonoBehaviour
         // is visible to the physics engine before the stop-check runs.
         if (shootPending)
         {
-            shootPending  = false;
-            HasBeenShot   = true;
+            shootPending     = false;
+            HasBeenShot      = true;
+            rb.constraints   = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
             rb.linearDamping = slideDrag;
+            if (aimArrow != null) aimArrow.SetActive(false);
             Vector3 dir = Quaternion.Euler(0f, aimAngle, 0f) * Vector3.forward;
             rb.AddForce(dir * currentPower, ForceMode.Impulse);
+            // Capture pre-shot spin so post-launch spin starts at the same value
+            launchAngVelY = (curlRight - curlLeft) * preShotSpinSpeed;
+            launchSpeed   = currentPower / rb.mass; // approximate: impulse/mass ≈ Δv
+            rb.angularVelocity = new Vector3(0f, launchAngVelY, 0f);
             return; // skip stop-check this frame; velocity is updated after physics step
         }
 
@@ -105,7 +139,8 @@ public class CurlingStoneController : MonoBehaviour
             if (!HasBeenShot)
             {
                 rb.linearVelocity  = Vector3.zero;
-                rb.angularVelocity = Vector3.zero;
+                float preShotCurl = curlRight - curlLeft;
+                rb.angularVelocity = new Vector3(0f, preShotCurl * preShotSpinSpeed, 0f);
             }
             return;
         }
@@ -119,12 +154,20 @@ public class CurlingStoneController : MonoBehaviour
             return;
         }
 
-        // Apply curl: constant lateral acceleration independent of mass
+        // Drive Y-axis spin proportionally to current linear speed, anchored to launch spin
+        float speedRatio = (launchSpeed > 0.001f) ? rb.linearVelocity.magnitude / launchSpeed : 0f;
+        rb.angularVelocity = new Vector3(0f, launchAngVelY * speedRatio, 0f);
+
+        // Apply curl: rotate the velocity heading by a tiny angle each frame.
+        // Degrees turned = curlDegreesPerMeter * distanceTravelledThisStep * netCurl
+        // This keeps speed constant so the stone can never be pushed backwards.
         float netCurl = curlRight - curlLeft;
         if (Mathf.Abs(netCurl) > 0.001f)
         {
-            Vector3 lateralDir = Vector3.Cross(Vector3.up, rb.linearVelocity.normalized);
-            rb.AddForce(lateralDir * netCurl * curlSideForce, ForceMode.Acceleration);
+            float speed        = rb.linearVelocity.magnitude;
+            float distThisStep = speed * Time.fixedDeltaTime;
+            float angleDeg     = netCurl * curlDegreesPerMeter * distThisStep;
+            rb.linearVelocity  = Quaternion.Euler(0f, angleDeg, 0f) * rb.linearVelocity;
         }
     }
 
@@ -137,6 +180,7 @@ public class CurlingStoneController : MonoBehaviour
         rb.linearVelocity  = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
         rb.linearDamping   = 0f;
+        rb.constraints     = RigidbodyConstraints.FreezePosition;
 
         transform.position = startPosition;
         transform.rotation = startRotation;
@@ -145,6 +189,8 @@ public class CurlingStoneController : MonoBehaviour
         currentPower = (minPower + maxPower) / 2f;
         curlLeft     = 0f;
         curlRight    = 0f;
+
+        if (aimArrow != null) aimArrow.SetActive(true);
     }
 
     public float   GetCurrentPower()  => currentPower;
