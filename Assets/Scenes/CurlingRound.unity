@@ -644,7 +644,7 @@ Transform:
   m_GameObject: {fileID: 912073181}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.5, z: -170}
+  m_LocalPosition: {x: 0, y: 0.5, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1022,12 +1022,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SoloCurlingGameManager
   stone: {fileID: 8027742036371559162}
   houseCenter: {fileID: 637207734}
+  stoneStartPoint: {fileID: 912073182}
   enemyStonePrefab: {fileID: 2236453764051679029, guid: 36e1e077170708b41963330faa0e5a70, type: 3}
   enemyStoneCount: 3
   enemyMinRadius: 0.3
   enemyMaxRadius: 6
   stoneRadius: 0.5
   maxSpawnAttempts: 30
+  enemySlideDrag: 0.001
+  enemyStopThreshold: 0.05
 --- !u!4 &1556265699
 Transform:
   m_ObjectHideFlags: 0
@@ -1290,7 +1293,7 @@ Transform:
   m_GameObject: {fileID: 2060920602}
   serializedVersion: 2
   m_LocalRotation: {x: 0.2164396, y: 0, z: 0, w: 0.97629607}
-  m_LocalPosition: {x: 0, y: 8, z: -16}
+  m_LocalPosition: {x: 0, y: 19, z: -16}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1478,7 +1481,7 @@ MonoBehaviour:
   powerChangeSpeed: 10
   maxCurlPower: 5
   curlChangeSpeed: 3
-  curlSideForce: 3
+  curlDegreesPerMeter: 0.4
   preShotSpinSpeed: 2
   spinSpeedPerVelocity: 2
   aimArrow: {fileID: 849098006}
