@@ -1,5 +1,9 @@
 fileFormatVersion: 2
+<<<<<<< HEAD
 guid: ccb837913e91cd74191816cbe0370f3b
+=======
+guid: 553caf033ca014145a89383688b3838b
+>>>>>>> pierre-branch
 folderAsset: yes
 DefaultImporter:
   externalObjects: {}

@@ -1,5 +1,9 @@
 fileFormatVersion: 2
+<<<<<<< HEAD
 guid: 5a45776b7380eb741827d7777cb39f11
+=======
+guid: 29207ab2830dce24d977b073bcfa1d81
+>>>>>>> pierre-branch
 NativeFormatImporter:
   externalObjects: {}
   mainObjectFileID: 11400000

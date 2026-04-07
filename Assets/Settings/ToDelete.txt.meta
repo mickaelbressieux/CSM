@@ -1,5 +1,9 @@
 fileFormatVersion: 2
+<<<<<<< HEAD
 guid: c853d7b3a8d2b5b49ad1499346e88288
+=======
+guid: 1257887984972cc4fa1ed7753ce79ada
+>>>>>>> pierre-branch
 TextScriptImporter:
   externalObjects: {}
   userData: 
