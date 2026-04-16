@@ -18,9 +18,11 @@ public class SoloCurlingGameManager : MonoBehaviour
     public int   maxSpawnAttempts  = 30;     // retries per stone before giving up
     public float enemySlideDrag    = 0.001f; // linear drag while gliding (match player stone)
     public float enemyStopThreshold = 0.05f; // velocity below which enemy stone is frozen
+    public string enemyTag = "opponent";
 
     private List<GameObject> enemyStones = new List<GameObject>();
     private float stoneGroundY;
+    private bool warnedMissingEnemyTag;
 
     private bool resultProcessed = false;
     private int  lastScore       = 0;
@@ -133,6 +135,7 @@ public class SoloCurlingGameManager : MonoBehaviour
             if (placed)
             {
                 GameObject go = Instantiate(enemyStonePrefab, pos, Quaternion.identity);
+                AssignEnemyTag(go);
                 Rigidbody erb = go.GetComponent<Rigidbody>();
                 if (erb != null)
                 {
@@ -184,5 +187,43 @@ public class SoloCurlingGameManager : MonoBehaviour
         targetPos.y = 0f;
 
         return Vector3.Distance(stonePos, targetPos);
+    }
+
+    private void AssignEnemyTag(GameObject target)
+    {
+        if (target == null)
+            return;
+
+        if (!IsTagDefined(enemyTag))
+        {
+            if (!warnedMissingEnemyTag)
+            {
+                warnedMissingEnemyTag = true;
+                Debug.LogWarning("Tag '" + enemyTag + "' is not defined. Add it in Tags and Layers to tag spawned stones.", this);
+            }
+            return;
+        }
+
+        warnedMissingEnemyTag = false;
+        target.tag = enemyTag;
+    }
+
+    private bool IsTagDefined(string tagName)
+    {
+        if (string.IsNullOrWhiteSpace(tagName))
+            return false;
+
+        if (tagName == "Untagged")
+            return true;
+
+        try
+        {
+            GameObject.FindWithTag(tagName);
+            return true;
+        }
+        catch (UnityException)
+        {
+            return false;
+        }
     }
 }
