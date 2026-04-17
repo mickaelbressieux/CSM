@@ -9,8 +9,8 @@ public class AIStoneController : MonoBehaviour
 {
     private enum StoneAction
     {
-        TargestNearestEnnemy,
-        TargestCenter
+        TargetNearestEnnemy,
+        TargetCenter
     }
 
     [SerializeField] private string playerTag = "Player";
@@ -23,8 +23,8 @@ public class AIStoneController : MonoBehaviour
     [Header("Actions")]
     [SerializeField] private List<StoneAction> availableActions = new List<StoneAction>
     {
-        StoneAction.TargestNearestEnnemy,
-        StoneAction.TargestCenter
+        StoneAction.TargetNearestEnnemy,
+        StoneAction.TargetCenter
     };
     [SerializeField] private int selectedActionIndex;
 
@@ -33,21 +33,8 @@ public class AIStoneController : MonoBehaviour
     [SerializeField] private bool useDistanceBasedForce = true;
     [SerializeField] private ForceMode forceMode = ForceMode.Impulse;
 
-    [Header("Empirical Model (force -> distance)")]
-    [SerializeField] private float[] measuredForces =
-    {
-        12f, 17f, 22f, 27f, 32f, 37f,
-        40.31f, 44.20f, 47.40f, 50.20f, 52.71f, 55.00f,
-        57.12f, 59.09f, 60.95f, 62.71f, 64.39f, 66.00f,
-        68.55f, 70.05f, 69.50f, 70.90f, 72.26f
-    };
-    [SerializeField] private float[] measuredDistances =
-    {
-        1.6f, 5f, 9.3f, 15f, 23.7f, 33f,
-        40f, 50f, 60f, 70f, 80f, 90f,
-        100f, 110f, 120f, 130f, 140f, 150f,
-        160f, 170f, 180f, 190f, 200f
-    };
+    [Header("Physical Model")]
+    [SerializeField] private float curlingFrictionCoefficient = 0.02f;
 
     public float LastDistance { get; private set; } = -1f;
     public GameObject LastNearestPlayer { get; private set; }
@@ -195,11 +182,11 @@ public class AIStoneController : MonoBehaviour
 
         switch (action)
         {
-            case StoneAction.TargestNearestEnnemy:
+            case StoneAction.TargetNearestEnnemy:
                 ComputeDistanceToNearestPlayer();
                 LaunchTowardNearestPlayer();
                 break;
-            case StoneAction.TargestCenter:
+            case StoneAction.TargetCenter:
                 ComputeDistanceToNearestCenter();
                 LaunchTowardNearestCenter();
                 break;
@@ -380,7 +367,8 @@ public class AIStoneController : MonoBehaviour
 
         Vector3 direction = nearestPlayer.transform.position - transform.position;
         direction.y = 0f;
-        if (direction.sqrMagnitude <= 0.0001f)
+        float distance = direction.magnitude;
+        if (distance <= 0.01f)
         {
             Debug.LogWarning("Player trop proche ou meme position: propulsion annulee.", this);
             return;
@@ -388,10 +376,16 @@ public class AIStoneController : MonoBehaviour
 
         direction.Normalize();
 
-        float finalForce = useDistanceBasedForce
-            ? ComputeForceForDistance(LastDistance)
-            : launchForce;
+        if (useDistanceBasedForce)
+        {
+            float impulse = ComputeCurlingImpulse(rb.mass, curlingFrictionCoefficient, distance);
+            LastAppliedForce = impulse;
+            rb.AddForce(direction * impulse, ForceMode.Impulse);
+            Debug.Log("Propulsion vers player appliquee. Distance recue: " + LastDistance + " | Impulsion: " + impulse, this);
+            return;
+        }
 
+        float finalForce = launchForce;
         LastAppliedForce = finalForce;
         rb.AddForce(direction * finalForce, forceMode);
         Debug.Log("Propulsion vers player appliquee. Distance recue: " + LastDistance + " | Force: " + finalForce, this);
@@ -414,7 +408,8 @@ public class AIStoneController : MonoBehaviour
 
         Vector3 direction = nearestCenter.transform.position - transform.position;
         direction.y = 0f;
-        if (direction.sqrMagnitude <= 0.0001f)
+        float distance = direction.magnitude;
+        if (distance <= 0.01f)
         {
             Debug.LogWarning("Center trop proche ou meme position: propulsion annulee.", this);
             return;
@@ -422,71 +417,30 @@ public class AIStoneController : MonoBehaviour
 
         direction.Normalize();
 
-        float finalForce = useDistanceBasedForce
-            ? ComputeForceForDistance(LastDistance)
-            : launchForce;
+        if (useDistanceBasedForce)
+        {
+            float impulse = ComputeCurlingImpulse(rb.mass, curlingFrictionCoefficient, distance);
+            LastAppliedForce = impulse;
+            rb.AddForce(direction * impulse, ForceMode.Impulse);
+            Debug.Log("Propulsion vers center appliquee. Distance recue: " + LastDistance + " | Impulsion: " + impulse, this);
+            return;
+        }
 
-        finalForce = Mathf.Max(0f, finalForce - 7f);
-
+        float finalForce = launchForce;
         LastAppliedForce = finalForce;
         rb.AddForce(direction * finalForce, forceMode);
         Debug.Log("Propulsion vers center appliquee. Distance recue: " + LastDistance + " | Force: " + finalForce, this);
     }
 
-    private float ComputeForceForDistance(float targetDistance)
+    private float ComputeCurlingImpulse(float mass, float mu, float distance)
     {
-        if (targetDistance <= 0f)
-            return launchForce;
+        if (mass <= 0f || distance <= 0f)
+            return 0f;
 
-        if (!HasValidModelData())
-            return launchForce;
-
-        int last = measuredDistances.Length - 1;
-
-        if (targetDistance <= measuredDistances[0])
-            return InterpolateForce(targetDistance, 0, 1);
-
-        if (targetDistance >= measuredDistances[last])
-            return measuredForces[last];
-
-        for (int i = 0; i < last; i++)
-        {
-            if (targetDistance >= measuredDistances[i] && targetDistance <= measuredDistances[i + 1])
-                return InterpolateForce(targetDistance, i, i + 1);
-        }
-
-        return launchForce;
-    }
-
-    private float InterpolateForce(float targetDistance, int i0, int i1)
-    {
-        float d0 = measuredDistances[i0];
-        float d1 = measuredDistances[i1];
-        float f0 = measuredForces[i0];
-        float f1 = measuredForces[i1];
-
-        if (Mathf.Approximately(d0, d1))
-            return f0;
-
-        float t = Mathf.InverseLerp(d0, d1, targetDistance);
-        return Mathf.Lerp(f0, f1, t);
-    }
-
-    private bool HasValidModelData()
-    {
-        if (measuredForces == null || measuredDistances == null)
-            return false;
-
-        if (measuredForces.Length < 2 || measuredForces.Length != measuredDistances.Length)
-            return false;
-
-        for (int i = 1; i < measuredDistances.Length; i++)
-        {
-            if (measuredDistances[i] <= measuredDistances[i - 1])
-                return false;
-        }
-
-        return true;
+        float clampedMu = Mathf.Max(0f, mu);
+        float g = 9.81f;
+        float v0 = Mathf.Sqrt(2f * clampedMu * g * distance);
+        return mass * v0;
     }
 
     private void ClampSelectedActionIndex()
@@ -509,11 +463,11 @@ public class AIStoneController : MonoBehaviour
         if (availableActions == null)
             availableActions = new List<StoneAction>();
 
-        if (!availableActions.Contains(StoneAction.TargestNearestEnnemy))
-            availableActions.Add(StoneAction.TargestNearestEnnemy);
+        if (!availableActions.Contains(StoneAction.TargetNearestEnnemy))
+            availableActions.Add(StoneAction.TargetNearestEnnemy);
 
-        if (!availableActions.Contains(StoneAction.TargestCenter))
-            availableActions.Add(StoneAction.TargestCenter);
+        if (!availableActions.Contains(StoneAction.TargetCenter))
+            availableActions.Add(StoneAction.TargetCenter);
     }
 
     private string GetCurrentActionName()
