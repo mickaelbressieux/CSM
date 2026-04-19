@@ -1486,8 +1486,7 @@ PrefabInstance:
       propertyPath: m_Constraints
       value: 80
       objectReference: {fileID: 0}
-    m_RemovedComponents:
-    - {fileID: 1494803274558186332, guid: c3e8d8c10ebde0f42a30fe0f46bd3a1c, type: 3}
+    m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
     m_AddedComponents:
@@ -1576,13 +1575,12 @@ MonoBehaviour:
   aimSpeed: 60
   maxAimAngle: 45
   minPower: 5
-  maxPower: 50
+  maxPower: 40
   powerChangeSpeed: 10
   maxCurlPower: 5
   curlChangeSpeed: 3
-  curlDegreesPerMeter: 0.4
-  preShotSpinSpeed: 2
-  spinSpeedPerVelocity: 2
+  curlDegreesPerMeter: 0.05
+  preShotSpinSpeed: 1
   aimArrow: {fileID: 849098006}
   arrowYOffset: 0.05
   arrowForwardOffset: 2

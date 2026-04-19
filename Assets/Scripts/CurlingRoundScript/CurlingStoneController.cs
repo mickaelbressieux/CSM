@@ -16,11 +16,13 @@ public class CurlingStoneController : MonoBehaviour
     [Header("Curl")]
     public float maxCurlPower = 5f;
     public float curlChangeSpeed = 3f;
-    public float curlDegreesPerMeter = 0.4f; // heading degrees rotated per meter traveled per curl unit
+    // Heading deflection per meter traveled per unit of curl.
+    // Positive curlAmount = curl RIGHT relative to the stone's direction of travel.
+    public float curlDegreesPerMeter = 0.5f;
 
     [Header("Pre-shot Spin")]
-    public float preShotSpinSpeed = 2f;     // rad/s of Y-axis spin per curl unit
-    public float spinSpeedPerVelocity = 2f; // rad/s of Y spin per m/s of linear speed after launch
+    // rad/s of Y-axis spin per curl unit — clockwise (viewed from above) for positive curl.
+    public float preShotSpinSpeed = 2f;
 
     [Header("Aim Arrow")]
     public GameObject aimArrow;
@@ -37,12 +39,10 @@ public class CurlingStoneController : MonoBehaviour
 
     private float aimAngle = 0f;
     private float currentPower;
-    private float curlLeft  = 0f;
-    private float curlRight = 0f;
+    // Negative = curl left, positive = curl right (relative to direction of travel).
+    private float curlAmount = 0f;
     private bool  shootPending = false;
     private Quaternion arrowBaseRotation;
-    private float launchAngVelY  = 0f;
-    private float launchSpeed    = 1f;
 
     public bool HasBeenShot  { get; private set; } = false;
     public bool ShotFinished { get; private set; } = false;
@@ -83,19 +83,12 @@ public class CurlingStoneController : MonoBehaviour
 
         currentPower = Mathf.Clamp(currentPower, minPower, maxPower);
 
-        // Q / A  →  curl left gauge
+        // Q  →  curl left   |   E  →  curl right
         if (Keyboard.current.qKey.isPressed)
-            curlLeft += curlChangeSpeed * Time.deltaTime;
-        if (Keyboard.current.aKey.isPressed)
-            curlLeft -= curlChangeSpeed * Time.deltaTime;
-        curlLeft = Mathf.Clamp(curlLeft, 0f, maxCurlPower);
-
-        // E / D  →  curl right gauge
+            curlAmount -= curlChangeSpeed * Time.deltaTime;
         if (Keyboard.current.eKey.isPressed)
-            curlRight += curlChangeSpeed * Time.deltaTime;
-        if (Keyboard.current.dKey.isPressed)
-            curlRight -= curlChangeSpeed * Time.deltaTime;
-        curlRight = Mathf.Clamp(curlRight, 0f, maxCurlPower);
+            curlAmount += curlChangeSpeed * Time.deltaTime;
+        curlAmount = Mathf.Clamp(curlAmount, -maxCurlPower, maxCurlPower);
 
         // Space  →  queue shot for next FixedUpdate
         if (Keyboard.current.spaceKey.wasPressedThisFrame)
@@ -127,10 +120,9 @@ public class CurlingStoneController : MonoBehaviour
             if (aimArrow != null) aimArrow.SetActive(false);
             Vector3 dir = Quaternion.Euler(0f, aimAngle, 0f) * Vector3.forward;
             rb.AddForce(dir * currentPower, ForceMode.Impulse);
-            // Capture pre-shot spin so post-launch spin starts at the same value
-            launchAngVelY = (curlRight - curlLeft) * preShotSpinSpeed;
-            launchSpeed   = currentPower / rb.mass; // approximate: impulse/mass ≈ Δv
-            rb.angularVelocity = new Vector3(0f, launchAngVelY, 0f);
+            // Set spin once at launch — positive curlAmount spins clockwise (right curl).
+            // Let angular damping decay it naturally; do NOT override each frame.
+            rb.angularVelocity = new Vector3(0f, curlAmount * preShotSpinSpeed, 0f);
             return; // skip stop-check this frame; velocity is updated after physics step
         }
 
@@ -139,8 +131,8 @@ public class CurlingStoneController : MonoBehaviour
             if (!HasBeenShot)
             {
                 rb.linearVelocity  = Vector3.zero;
-                float preShotCurl = curlRight - curlLeft;
-                rb.angularVelocity = new Vector3(0f, preShotCurl * preShotSpinSpeed, 0f);
+                // Spin stone for visual pre-shot feedback.
+                rb.angularVelocity = new Vector3(0f, curlAmount * preShotSpinSpeed, 0f);
             }
             return;
         }
@@ -154,19 +146,14 @@ public class CurlingStoneController : MonoBehaviour
             return;
         }
 
-        // Drive Y-axis spin proportionally to current linear speed, anchored to launch spin
-        float speedRatio = (launchSpeed > 0.001f) ? rb.linearVelocity.magnitude / launchSpeed : 0f;
-        rb.angularVelocity = new Vector3(0f, launchAngVelY * speedRatio, 0f);
-
-        // Apply curl: rotate the velocity heading by a tiny angle each frame.
-        // Degrees turned = curlDegreesPerMeter * distanceTravelledThisStep * netCurl
-        // This keeps speed constant so the stone can never be pushed backwards.
-        float netCurl = curlRight - curlLeft;
-        if (Mathf.Abs(netCurl) > 0.001f)
+        // Curl: deflect the velocity heading by a small angle each physics step.
+        // angleDeg > 0 → stone curves RIGHT relative to its direction of travel.
+        // Speed is preserved (rotation keeps vector length constant).
+        if (Mathf.Abs(curlAmount) > 0.001f)
         {
             float speed        = rb.linearVelocity.magnitude;
             float distThisStep = speed * Time.fixedDeltaTime;
-            float angleDeg     = netCurl * curlDegreesPerMeter * distThisStep;
+            float angleDeg     = curlAmount * curlDegreesPerMeter * distThisStep;
             rb.linearVelocity  = Quaternion.Euler(0f, angleDeg, 0f) * rb.linearVelocity;
         }
     }
@@ -187,14 +174,13 @@ public class CurlingStoneController : MonoBehaviour
 
         aimAngle     = 0f;
         currentPower = (minPower + maxPower) / 2f;
-        curlLeft     = 0f;
-        curlRight    = 0f;
+        curlAmount   = 0f;
 
         if (aimArrow != null) aimArrow.SetActive(true);
     }
 
     public float   GetCurrentPower()  => currentPower;
-    public float   GetCurlLeft()      => curlLeft;
-    public float   GetCurlRight()     => curlRight;
+    // Negative = curl left, positive = curl right.
+    public float   GetCurlAmount()    => curlAmount;
     public Vector3 GetAimDirection()  => Quaternion.Euler(0f, aimAngle, 0f) * Vector3.forward;
 }
