@@ -33,8 +33,17 @@ public class AIStoneController : MonoBehaviour
     [SerializeField] private bool useDistanceBasedForce = true;
     [SerializeField] private ForceMode forceMode = ForceMode.Impulse;
 
-    [Header("Physical Model")]
-    [SerializeField] private float curlingFrictionCoefficient = 0.02f;
+    [Header("Distance Force Calibration")]
+    [SerializeField] private float assumedStoneDynamicFriction = 0.6f;
+    [SerializeField] private float surfaceDynamicFriction = 0.02f;
+    [SerializeField] private PhysicsMaterialCombine frictionCombine = PhysicsMaterialCombine.Average;
+    [SerializeField] private float frictionModelExponent = 1.6756f;
+    [SerializeField] private float frictionModelScale = 0.639f;
+    [SerializeField] private bool compensateWithReferencePoint = true;
+    [SerializeField] private float referenceImpulse = 70f;
+    [SerializeField] private float referenceDistance = 233.8326f;
+    [SerializeField] private float minimumDistanceBasedForce = 0f;
+    [SerializeField] private float maximumDistanceBasedForce = 100f;
 
     public float LastDistance { get; private set; } = -1f;
     public GameObject LastNearestPlayer { get; private set; }
@@ -378,10 +387,11 @@ public class AIStoneController : MonoBehaviour
 
         if (useDistanceBasedForce)
         {
-            float impulse = ComputeCurlingImpulse(rb.mass, curlingFrictionCoefficient, distance);
-            LastAppliedForce = impulse;
-            rb.AddForce(direction * impulse, ForceMode.Impulse);
-            Debug.Log("Propulsion vers player appliquee. Distance recue: " + LastDistance + " | Impulsion: " + impulse, this);
+            float impulseMagnitude = ComputeDistanceBasedImpulse(distance);
+            Vector3 impulse = direction.normalized * impulseMagnitude;
+            LastAppliedForce = impulseMagnitude;
+            rb.AddForce(impulse, ForceMode.Impulse);
+            Debug.Log("Propulsion vers player appliquee. Distance recue: " + LastDistance + " | Impulsion: " + impulseMagnitude, this);
             return;
         }
 
@@ -419,10 +429,11 @@ public class AIStoneController : MonoBehaviour
 
         if (useDistanceBasedForce)
         {
-            float impulse = ComputeCurlingImpulse(rb.mass, curlingFrictionCoefficient, distance);
-            LastAppliedForce = impulse;
-            rb.AddForce(direction * impulse, ForceMode.Impulse);
-            Debug.Log("Propulsion vers center appliquee. Distance recue: " + LastDistance + " | Impulsion: " + impulse, this);
+            float impulseMagnitude = ComputeDistanceBasedImpulse(distance);
+            Vector3 impulse = direction.normalized * impulseMagnitude;
+            LastAppliedForce = impulseMagnitude;
+            rb.AddForce(impulse, ForceMode.Impulse);
+            Debug.Log("Propulsion vers center appliquee. Distance recue: " + LastDistance + " | Impulsion: " + impulseMagnitude, this);
             return;
         }
 
@@ -432,15 +443,65 @@ public class AIStoneController : MonoBehaviour
         Debug.Log("Propulsion vers center appliquee. Distance recue: " + LastDistance + " | Force: " + finalForce, this);
     }
 
-    private float ComputeCurlingImpulse(float mass, float mu, float distance)
+    private float ComputeDistanceBasedImpulse(float distance)
     {
-        if (mass <= 0f || distance <= 0f)
+        if (distance <= 0f)
             return 0f;
 
-        float clampedMu = Mathf.Max(0f, mu);
-        float g = 9.81f;
-        float v0 = Mathf.Sqrt(2f * clampedMu * g * distance);
-        return mass * v0;
+        // Fully analytic, continuous model:
+        // distance ~= coeff * impulse^exponent
+        // coeff is derived from friction and can be compensated using a measured reference point.
+        float exponent = Mathf.Max(0.0001f, frictionModelExponent);
+        float requiredForce = Mathf.Pow(distance / ComputeFrictionDistanceCoefficient(), 1f / exponent);
+        return Mathf.Clamp(requiredForce, minimumDistanceBasedForce, maximumDistanceBasedForce);
+    }
+
+    private float ComputeFrictionDistanceCoefficient()
+    {
+        float gravity = Mathf.Max(0.0001f, Mathf.Abs(Physics.gravity.y));
+        float mass = rb != null ? Mathf.Max(0.0001f, rb.mass) : 1f;
+        float effectiveDynamicFriction = ComputeEffectiveDynamicFriction();
+        float scale = Mathf.Max(0.0001f, frictionModelScale);
+        float exponent = Mathf.Max(0.0001f, frictionModelExponent);
+
+        float coefficient = (1f / (2f * effectiveDynamicFriction * gravity * mass * mass)) * scale;
+
+        if (compensateWithReferencePoint && referenceImpulse > 0f && referenceDistance > 0f)
+        {
+            float predictedReferenceDistance = coefficient * Mathf.Pow(referenceImpulse, exponent);
+            if (predictedReferenceDistance > 0.0001f)
+            {
+                float correctionRatio = referenceDistance / predictedReferenceDistance;
+                coefficient *= correctionRatio;
+            }
+        }
+
+        return Mathf.Max(0.0001f, coefficient);
+    }
+
+    private float ComputeEffectiveDynamicFriction()
+    {
+        float stoneFriction = Mathf.Max(0f, assumedStoneDynamicFriction);
+        float surfaceFriction = Mathf.Max(0f, surfaceDynamicFriction);
+
+        float combined;
+        switch (frictionCombine)
+        {
+            case PhysicsMaterialCombine.Minimum:
+                combined = Mathf.Min(stoneFriction, surfaceFriction);
+                break;
+            case PhysicsMaterialCombine.Maximum:
+                combined = Mathf.Max(stoneFriction, surfaceFriction);
+                break;
+            case PhysicsMaterialCombine.Multiply:
+                combined = stoneFriction * surfaceFriction;
+                break;
+            default:
+                combined = (stoneFriction + surfaceFriction) * 0.5f;
+                break;
+        }
+
+        return Mathf.Max(0.0001f, combined);
     }
 
     private void ClampSelectedActionIndex()

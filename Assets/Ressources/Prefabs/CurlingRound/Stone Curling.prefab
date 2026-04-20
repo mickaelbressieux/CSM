@@ -81,7 +81,7 @@ MonoBehaviour:
   powerChangeSpeed: 10
   maxCurlPower: 5
   curlChangeSpeed: 3
-  curlSideForce: 3
+  curlDegreesPerMeter: 0.4
   preShotSpinSpeed: 2
   spinSpeedPerVelocity: 2
   aimArrow: {fileID: 0}
@@ -265,7 +265,7 @@ MeshCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 939002215604711830}
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 13400000, guid: aac2737d0d6619443ae1d29ca25d3183, type: 2}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0

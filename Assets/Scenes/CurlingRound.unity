@@ -392,85 +392,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerTagAssigner
   playerTag: Player
---- !u!1 &121520970
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 121520973}
-  - component: {fileID: 121520972}
-  - component: {fileID: 121520971}
-  m_Layer: 0
-  m_Name: EventSystem
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &121520971
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 121520970}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 01614664b831546d2ae94a42149d80ac, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.UI.InputSystemUIInputModule
-  m_SendPointerHoverToParent: 1
-  m_MoveRepeatDelay: 0.5
-  m_MoveRepeatRate: 0.1
-  m_XRTrackingOrigin: {fileID: 0}
-  m_ActionsAsset: {fileID: -944628639613478452, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_PointAction: {fileID: -1654692200621890270, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_MoveAction: {fileID: -8784545083839296357, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_SubmitAction: {fileID: 392368643174621059, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_CancelAction: {fileID: 7727032971491509709, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_LeftClickAction: {fileID: 3001919216989983466, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_MiddleClickAction: {fileID: -2185481485913320682, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_RightClickAction: {fileID: -4090225696740746782, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_ScrollWheelAction: {fileID: 6240969308177333660, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_TrackedDevicePositionAction: {fileID: 6564999863303420839, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_TrackedDeviceOrientationAction: {fileID: 7970375526676320489, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_DeselectOnBackgroundClick: 1
-  m_PointerBehavior: 0
-  m_CursorLockBehavior: 0
-  m_ScrollDeltaPerTick: 6
---- !u!114 &121520972
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 121520970}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 76c392e42b5098c458856cdf6ecaaaa1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.EventSystems.EventSystem
-  m_FirstSelected: {fileID: 0}
-  m_sendNavigationEvents: 1
-  m_DragThreshold: 10
---- !u!4 &121520973
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 121520970}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &611696112
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -481,7 +402,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 1154912570363139279, guid: c3e8d8c10ebde0f42a30fe0f46bd3a1c, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 17.3
+      value: 30.3
       objectReference: {fileID: 0}
     - target: {fileID: 1154912570363139279, guid: c3e8d8c10ebde0f42a30fe0f46bd3a1c, type: 3}
       propertyPath: m_LocalPosition.y
@@ -987,59 +908,15 @@ MonoBehaviour:
   showDistanceOnScreen: 1
   uiMargin: {x: 16, y: 16}
   fontSize: 20
-  availableActions: 0000000001000000
+  availableActions: 000000000100000002000000
   selectedActionIndex: 0
   launchForce: 10
   useDistanceBasedForce: 1
   forceMode: 1
-  measuredForces:
-  - 12
-  - 17
-  - 22
-  - 27
-  - 32
-  - 37
-  - 40.31
-  - 44.2
-  - 47.4
-  - 50.2
-  - 52.71
-  - 55
-  - 57.12
-  - 59.09
-  - 60.95
-  - 62.71
-  - 64.39
-  - 66
-  - 68.55
-  - 70.05
-  - 69.5
-  - 70.9
-  - 72.26
-  measuredDistances:
-  - 1.6
-  - 5
-  - 9.3
-  - 15
-  - 23.7
-  - 33
-  - 40
-  - 50
-  - 60
-  - 70
-  - 80
-  - 90
-  - 100
-  - 110
-  - 120
-  - 130
-  - 140
-  - 150
-  - 160
-  - 170
-  - 180
-  - 190
-  - 200
+  calibrationDistanceCoefficient: 0.1051
+  calibrationForceExponent: 1.6756
+  minimumDistanceBasedForce: 5.97
+  maximumDistanceBasedForce: 100
 --- !u!114 &1227311876
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1100,9 +977,17 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 2090547357762812053, guid: 36e1e077170708b41963330faa0e5a70, type: 3}
+      propertyPath: m_Material
+      value: 
+      objectReference: {fileID: 13400000, guid: aac2737d0d6619443ae1d29ca25d3183, type: 2}
     - target: {fileID: 2236453764051679029, guid: 36e1e077170708b41963330faa0e5a70, type: 3}
       propertyPath: m_Name
       value: Stone Curling Yellow
+      objectReference: {fileID: 0}
+    - target: {fileID: 5416627764038461199, guid: 36e1e077170708b41963330faa0e5a70, type: 3}
+      propertyPath: m_AngularDamping
+      value: 0.05
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -1210,7 +1095,7 @@ MeshCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1457684718}
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 13400000, guid: fb9d80f459bdd37429c7980c17ab7b3c, type: 2}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -1292,7 +1177,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 5, y: 1, z: 35}
+  m_LocalScale: {x: 15.5365, y: 1, z: 35}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -1696,6 +1581,10 @@ PrefabInstance:
       propertyPath: curlSideForce
       value: 12.2
       objectReference: {fileID: 0}
+    - target: {fileID: 2090547357762812053, guid: c3e8d8c10ebde0f42a30fe0f46bd3a1c, type: 3}
+      propertyPath: m_Material
+      value: 
+      objectReference: {fileID: 13400000, guid: aac2737d0d6619443ae1d29ca25d3183, type: 2}
     - target: {fileID: 2214104164178483444, guid: c3e8d8c10ebde0f42a30fe0f46bd3a1c, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -1823,7 +1712,6 @@ SceneRoots:
   - {fileID: 1457684722}
   - {fileID: 912073182}
   - {fileID: 44235560}
-  - {fileID: 121520973}
   - {fileID: 637207734}
   - {fileID: 673811803}
   - {fileID: 1189283365}
