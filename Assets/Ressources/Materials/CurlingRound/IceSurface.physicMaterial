@@ -8,7 +8,7 @@ PhysicsMaterial:
   m_PrefabAsset: {fileID: 0}
   m_Name: IceSurface
   serializedVersion: 2
-  m_DynamicFriction: 0.02
+  m_DynamicFriction: 0.08
   m_StaticFriction: 0.6
   m_Bounciness: 0
   m_FrictionCombine: 0

@@ -10,7 +10,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1154912570363139279}
   - component: {fileID: 5416627764038461199}
-  - component: {fileID: 1494803274558186332}
   m_Layer: 0
   m_Name: Stone Curling
   m_TagString: Untagged
@@ -62,33 +61,6 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
---- !u!114 &1494803274558186332
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2236453764051679029}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c09f6b8943366304ba021bbb7e5bd65a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::CurlingStoneController
-  aimSpeed: 60
-  maxAimAngle: 45
-  minPower: 5
-  maxPower: 30
-  powerChangeSpeed: 10
-  maxCurlPower: 5
-  curlChangeSpeed: 3
-  curlDegreesPerMeter: 0.4
-  preShotSpinSpeed: 2
-  spinSpeedPerVelocity: 2
-  aimArrow: {fileID: 0}
-  arrowYOffset: 0.05
-  arrowForwardOffset: 2
-  slideDrag: 0.001
-  stopThreshold: 0.05
 --- !u!1001 &981970467988155812
 PrefabInstance:
   m_ObjectHideFlags: 0

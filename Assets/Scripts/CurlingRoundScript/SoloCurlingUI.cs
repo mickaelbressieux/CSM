@@ -15,23 +15,19 @@ public class SoloCurlingUI : MonoBehaviour
         if (!stone.HasBeenShot)
         {
             float power      = stone.GetCurrentPower();
-            float curlLeft   = stone.GetCurlLeft();
-            float curlRight  = stone.GetCurlRight();
+            float curl       = stone.GetCurlAmount();
             float maxCurl    = stone.maxCurlPower;
             Vector3 aim      = stone.GetAimDirection();
 
-            string leftBar  = GaugeBar(curlLeft,  maxCurl);
-            string rightBar = GaugeBar(curlRight, maxCurl);
+            string curlBar = CurlBar(curl, maxCurl);
 
             infoText.text =
                 "Left / Right: aim\n" +
                 "Up / Down: power\n" +
-                "Q / A: curl left\n" +
-                "E / D: curl right\n" +
+                "Q: curl left   E: curl right\n" +
                 "Space: shoot\n\n" +
-                $"Power:      {power:F1}\n" +
-                $"Curl Left:  {leftBar} {curlLeft:F1}\n" +
-                $"Curl Right: {rightBar} {curlRight:F1}\n" +
+                $"Power: {power:F1}\n" +
+                $"Curl:  {curlBar} {curl:+0.0;-0.0;0.0}\n" +
                 $"Aim: {aim.x:F2}, {aim.z:F2}";
         }
         else if (!stone.ShotFinished)
@@ -47,10 +43,22 @@ public class SoloCurlingUI : MonoBehaviour
         }
     }
 
-    private string GaugeBar(float value, float max, int steps = 8)
+    // Shows a centred bar: ←←←[.....] (left) or [.....]→→→ (right)
+    private string CurlBar(float value, float max, int halfSteps = 5)
     {
-        int filled = Mathf.RoundToInt((value / max) * steps);
-        filled = Mathf.Clamp(filled, 0, steps);
-        return "[" + new string('|', filled) + new string('.', steps - filled) + "]";
+        int filled = Mathf.RoundToInt((Mathf.Abs(value) / max) * halfSteps);
+        filled = Mathf.Clamp(filled, 0, halfSteps);
+        string empty = new string('.', halfSteps);
+        if (value < -0.05f)
+        {
+            string arrows = new string('<', filled);
+            return arrows + new string('.', halfSteps - filled) + "|" + empty;
+        }
+        if (value > 0.05f)
+        {
+            string arrows = new string('>', filled);
+            return empty + "|" + new string('.', halfSteps - filled) + arrows;
+        }
+        return empty + "|" + empty;
     }
 }

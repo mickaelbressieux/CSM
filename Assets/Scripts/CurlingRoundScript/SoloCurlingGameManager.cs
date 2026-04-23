@@ -49,11 +49,7 @@ public class SoloCurlingGameManager : MonoBehaviour
             Debug.Log("Pierre arrêtée. Score = " + lastScore);
         }
 
-        if (resultProcessed && Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
-        {
-            DoReset();
-        }
-        else if (!resultProcessed && Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
+        if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
         {
             DoReset();
         }
@@ -61,6 +57,14 @@ public class SoloCurlingGameManager : MonoBehaviour
 
     private void DoReset()
     {
+        // Stop all enemy stones immediately before destroying them
+        foreach (var s in enemyStones)
+        {
+            if (s == null) continue;
+            Rigidbody erb = s.GetComponent<Rigidbody>();
+            if (erb != null) { erb.linearVelocity = Vector3.zero; erb.angularVelocity = Vector3.zero; }
+        }
+
         stone.ResetStone();
         if (stoneStartPoint != null)
             stone.transform.position = stoneStartPoint.position;
