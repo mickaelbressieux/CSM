@@ -42,6 +42,11 @@ public class AIStoneController : MonoBehaviour
     [SerializeField] private bool compensateWithReferencePoint = true;
     [SerializeField] private float referenceImpulse = 70f;
     [SerializeField] private float referenceDistance = 233.8326f;
+    [SerializeField] private bool useEmpiricalTwoPointCalibration = true;
+    [SerializeField] private float empiricalReferenceImpulseA = 51.54f;
+    [SerializeField] private float empiricalReferenceDistanceA = 217.8568f;
+    [SerializeField] private float empiricalReferenceImpulseB = 36.31f;
+    [SerializeField] private float empiricalReferenceDistanceB = 108.5f;
     [SerializeField] private float minimumDistanceBasedForce = 0f;
     [SerializeField] private float maximumDistanceBasedForce = 100f;
 
@@ -448,6 +453,9 @@ public class AIStoneController : MonoBehaviour
         if (distance <= 0f)
             return 0f;
 
+        if (TryComputeEmpiricalRequiredForce(distance, out float empiricalRequiredForce))
+            return Mathf.Clamp(empiricalRequiredForce, minimumDistanceBasedForce, maximumDistanceBasedForce);
+
         // Fully analytic, continuous model:
         // distance ~= coeff * impulse^exponent
         // coeff is derived from friction and can be compensated using a measured reference point.
@@ -477,6 +485,44 @@ public class AIStoneController : MonoBehaviour
         }
 
         return Mathf.Max(0.0001f, coefficient);
+    }
+
+    private bool TryComputeEmpiricalRequiredForce(float distance, out float requiredForce)
+    {
+        requiredForce = 0f;
+
+        if (!useEmpiricalTwoPointCalibration)
+            return false;
+
+        float f1 = empiricalReferenceImpulseA;
+        float d1 = empiricalReferenceDistanceA;
+        float f2 = empiricalReferenceImpulseB;
+        float d2 = empiricalReferenceDistanceB;
+
+        if (f1 <= 0f || f2 <= 0f || d1 <= 0f || d2 <= 0f)
+            return false;
+
+        float forceRatio = f2 / f1;
+        float distanceRatio = d2 / d1;
+
+        if (forceRatio <= 0f || distanceRatio <= 0f)
+            return false;
+
+        float denominator = Mathf.Log(forceRatio);
+        if (Mathf.Abs(denominator) < 1e-5f)
+            return false;
+
+        // Empirical power-law: distance = a * force^b, fitted from two measured points.
+        float b = Mathf.Log(distanceRatio) / denominator;
+        if (Mathf.Abs(b) < 1e-5f)
+            return false;
+
+        float a = d1 / Mathf.Pow(f1, b);
+        if (a <= 0f)
+            return false;
+
+        requiredForce = Mathf.Pow(distance / a, 1f / b);
+        return !float.IsNaN(requiredForce) && !float.IsInfinity(requiredForce) && requiredForce >= 0f;
     }
 
     private float ComputeEffectiveDynamicFriction()
