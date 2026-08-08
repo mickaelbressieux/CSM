@@ -1,51 +1,95 @@
 using UnityEngine;
 using TMPro;
 
-public class SoloCurlingUI : MonoBehaviour
+/// <summary>
+/// Single UI authority for the curling scene (lives on the "UIManager" object). Both the
+/// test-drop mode and the temp match mode render through this one styled <see cref="infoText"/>
+/// label, so the HUD looks the same everywhere.
+///
+/// Two inputs drive it:
+/// - the <b>active shot</b> (<see cref="stone"/> + <see cref="provider"/>) — the live aim / power /
+///   curl HUD is derived from these. Test mode wires them once in the inspector; match mode
+///   reassigns them each turn via <see cref="SetActiveShot"/>.
+/// - an optional <b>banner</b> line (<see cref="SetBanner"/>) used for match turn prompts, the
+///   "AI is throwing" state, and the end-of-round result.
+/// </summary>
+public class CurlingUIManager : MonoBehaviour
 {
-    public StoneLauncher stone;               // shot state (HasBeenShot / ShotFinished)
-    public PlayerShotProvider provider;        // live aim / power / curl for the HUD
+    public StoneLauncher stone;                // active shot state (HasBeenShot / ShotFinished)
+    public PlayerShotProvider provider;        // active human aim / power / curl (null on AI turns)
     public SoloCurlingGameManager gameManager;
     public TMP_Text infoText;
 
-    private void Update()
+    // Optional override / prefix line. Empty means "no banner".
+    private string banner = "";
+
+    /// <summary>Point the HUD at the shot currently in play. Pass a null provider when it is not a
+    /// human's turn (e.g. the AI is throwing), so the aiming HUD is suppressed.</summary>
+    public void SetActiveShot(StoneLauncher activeStone, PlayerShotProvider activeProvider)
     {
-        if (stone == null || provider == null || gameManager == null || infoText == null)
-            return;
-
-        if (!stone.HasBeenShot)
-        {
-            ShotData shot    = provider.CurrentShot;
-            float power      = shot.Power;
-            float curl       = shot.Curl;
-            float maxCurl    = provider.maxCurlPower;
-            Vector3 aim      = shot.Direction;
-
-            string curlBar = CurlBar(curl, maxCurl);
-
-            infoText.text =
-                "Left / Right: aim\n" +
-                "Up / Down: power\n" +
-                "Q: curl left   E: curl right\n" +
-                "Space: shoot\n\n" +
-                $"Power: {power:F1}\n" +
-                $"Curl:  {curlBar} {curl:+0.0;-0.0;0.0}\n" +
-                $"Aim: {aim.x:F2}, {aim.z:F2}";
-        }
-        else if (!stone.ShotFinished)
-        {
-            infoText.text = "The stone is sliding...";
-        }
-        else
-        {
-            infoText.text =
-                $"Score: {gameManager.GetLastScore()}\n" +
-                $"Distance: {gameManager.GetDistanceToCenter():F2}\n" +
-                "Press R to reset";
-        }
+        stone = activeStone;
+        provider = activeProvider;
     }
 
-    // Shows a centred bar: ←←←[.....] (left) or [.....]→→→ (right)
+    public void SetBanner(string message) => banner = message ?? "";
+    public void ClearBanner() => banner = "";
+
+    private void Update()
+    {
+        if (infoText == null)
+            return;
+
+        string prefix = string.IsNullOrEmpty(banner) ? "" : banner + "\n\n";
+
+        // Player is aiming: show the banner (if any) above the live aim / power / curl HUD.
+        if (provider != null && stone != null && !stone.HasBeenShot)
+        {
+            infoText.text = prefix + AimingHud();
+            return;
+        }
+
+        // A shot is sliding.
+        if (stone != null && stone.HasBeenShot && !stone.ShotFinished)
+        {
+            infoText.text = string.IsNullOrEmpty(banner) ? "The stone is sliding..." : banner;
+            return;
+        }
+
+        // Otherwise: a banner (AI turn text / match result) wins; else the test-mode result panel.
+        if (!string.IsNullOrEmpty(banner))
+        {
+            infoText.text = banner;
+            return;
+        }
+
+        infoText.text = gameManager != null
+            ? $"Score: {gameManager.GetLastScore()}\n" +
+              $"Distance: {gameManager.GetDistanceToCenter():F2}\n" +
+              "Press R to reset"
+            : "";
+    }
+
+    private string AimingHud()
+    {
+        ShotData shot = provider.CurrentShot;
+        float power   = shot.Power;
+        float curl    = shot.Curl;
+        float maxCurl = provider.maxCurlPower;
+        Vector3 aim   = shot.Direction;
+
+        string curlBar = CurlBar(curl, maxCurl);
+
+        return
+            "Left / Right: aim\n" +
+            "Up / Down: power\n" +
+            "Q: curl left   E: curl right\n" +
+            "Space: shoot\n\n" +
+            $"Power: {power:F1}\n" +
+            $"Curl:  {curlBar} {curl:+0.0;-0.0;0.0}\n" +
+            $"Aim: {aim.x:F2}, {aim.z:F2}";
+    }
+
+    // Shows a centred bar: <<<..|..... (left) or .....|..>>> (right)
     private string CurlBar(float value, float max, int halfSteps = 5)
     {
         int filled = Mathf.RoundToInt((Mathf.Abs(value) / max) * halfSteps);

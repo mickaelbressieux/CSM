@@ -1,13 +1,42 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class SoloCurlingGameManager : MonoBehaviour
 {
+    // TestDrop = the original showcase (drop N enemy stones, player shoots one).
+    // Match    = temp turn-based round: AI and player alternate, AI first, 3 stones each.
+    public enum GameMode { TestDrop, Match }
+
+    [Header("Game Mode")]
+    public GameMode mode = GameMode.TestDrop;
+
     [Header("References")]
     public StoneLauncher stone;
     public Transform houseCenter;
     public Transform stoneStartPoint;
+
+    [Header("Match Mode (temp showcase)")]
+    public GameObject playerStonePrefab;      // white Stone Curling prefab (AI reuses enemyStonePrefab)
+    public CurlingUIManager soloCurlingUI;    // the single UI; match mode drives its banner + active shot
+    public GameObject matchAimArrow;          // optional aim arrow for the player's match turns
+    public int stonesPerSide = 3;
+
+    [Header("Match - recovery")]
+    public Key forceNextTurnKey = Key.N;      // force the current turn to end / pass to the other player
+    public float killY = -2f;                 // a stone below this Y has fallen off the sheet -> out of play
+
+    [Header("Match - AI tuning")]
+    public float aiThinkDelay  = 1f;
+    public float aiBasePower   = 17f;
+    public float aiPowerJitter = 0f;
+    public float aiBaseCurl    = 0f;
+    public float aiCurlJitter  = 0f;
+
+    [Header("Match - player tuning")]
+    public float playerMinPower = 5f;
+    public float playerMaxPower = 30f;
 
     [Header("Enemy Stones")]
     public GameObject enemyStonePrefab;
@@ -21,6 +50,13 @@ public class SoloCurlingGameManager : MonoBehaviour
     public string enemyTag = "opponent";
 
     private List<GameObject> enemyStones = new List<GameObject>();
+    // Match-mode stones, tracked by side so scoring never relies on tags.
+    private List<GameObject> playerStones = new List<GameObject>();
+    private List<GameObject> aiStones     = new List<GameObject>();
+    // Stones that fell off the sheet (below killY): frozen and excluded from scoring.
+    private HashSet<GameObject> lostStones = new HashSet<GameObject>();
+    private GameObject currentStone;      // the stone in play this turn (not yet in a side list)
+    private bool forceEndTurn;            // set when the user forces the current turn to end
     private float stoneGroundY;
     private bool warnedMissingEnemyTag;
 
@@ -29,6 +65,17 @@ public class SoloCurlingGameManager : MonoBehaviour
 
     private void Start()
     {
+        if (mode == GameMode.Match)
+        {
+            // In match mode the pre-placed scene stone is unused; every stone is spawned.
+            if (stone != null) stone.gameObject.SetActive(false);
+            // Drive the shared UI even if it wasn't wired in the inspector.
+            if (soloCurlingUI == null) soloCurlingUI = FindFirstObjectByType<CurlingUIManager>();
+            stoneGroundY = stoneStartPoint != null ? stoneStartPoint.position.y : 0f;
+            StartCoroutine(RunMatch());
+            return;
+        }
+
         if (stoneStartPoint != null)
             stone.transform.position = stoneStartPoint.position;
 
@@ -38,6 +85,15 @@ public class SoloCurlingGameManager : MonoBehaviour
 
     private void Update()
     {
+        // Match mode drives its own turns / reset inside RunMatch(); here we only watch
+        // for the force-next-turn key so a stuck stone can be skipped.
+        if (mode == GameMode.Match)
+        {
+            if (Keyboard.current != null && Keyboard.current[forceNextTurnKey].wasPressedThisFrame)
+                forceEndTurn = true;
+            return;
+        }
+
         if (stone == null || houseCenter == null)
             return;
 
@@ -87,8 +143,50 @@ public class SoloCurlingGameManager : MonoBehaviour
 
     private void FixedUpdate()
     {
-        // Snap slow-moving enemy stones to a full stop so they don't creep indefinitely
-        foreach (var s in enemyStones)
+        // Snap slow-moving stones to a full stop so they don't creep indefinitely.
+        if (mode == GameMode.Match)
+        {
+            // A stone that fell off the sheet never slows down on its own, which would
+            // otherwise wedge the round; freeze any that dropped below killY.
+            KillIfFallen(currentStone);
+            foreach (var s in playerStones) KillIfFallen(s);
+            foreach (var s in aiStones)     KillIfFallen(s);
+
+            SnapSlowStones(playerStones);
+            SnapSlowStones(aiStones);
+            return;
+        }
+
+        SnapSlowStones(enemyStones);
+    }
+
+    // Freeze a stone that has dropped off the sheet and mark it out of play.
+    private void KillIfFallen(GameObject s)
+    {
+        if (s == null || lostStones.Contains(s)) return;
+        if (s.transform.position.y < killY)
+        {
+            NeutralizeStone(s);
+            lostStones.Add(s);
+        }
+    }
+
+    // Stop a stone dead where it is (used by kill-plane recovery and manual force-skip).
+    private void NeutralizeStone(GameObject s)
+    {
+        if (s == null) return;
+        Rigidbody rb = s.GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.linearVelocity  = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.constraints     = RigidbodyConstraints.FreezeAll;
+        }
+    }
+
+    private void SnapSlowStones(List<GameObject> stones)
+    {
+        foreach (var s in stones)
         {
             if (s == null) continue;
             Rigidbody rb = s.GetComponent<Rigidbody>();
@@ -191,6 +289,227 @@ public class SoloCurlingGameManager : MonoBehaviour
         targetPos.y = 0f;
 
         return Vector3.Distance(stonePos, targetPos);
+    }
+
+    // ------------------------------------------------------------------
+    // Temp match mode: AI and player alternate throws (AI first), 3 each.
+    // Every stone is spawned at runtime and driven through the SAME
+    // StoneLauncher via the IShotProvider seam — that is what this showcases.
+    // ------------------------------------------------------------------
+
+    private IEnumerator RunMatch()
+    {
+        while (true)
+        {
+            ClearMatchStones();
+
+            int totalThrows = stonesPerSide * 2;
+            for (int i = 0; i < totalThrows; i++)
+            {
+                bool isAI = (i % 2 == 0); // even turns are the AI's, so the AI starts
+                yield return StartCoroutine(RunTurn(isAI));
+            }
+
+            string result = ComputeMatchResult();
+            Debug.Log("Match end. " + result);
+            if (soloCurlingUI != null)
+            {
+                soloCurlingUI.SetActiveShot(null, null);
+                soloCurlingUI.SetBanner(result + "\nPress R to play again.");
+            }
+
+            yield return new WaitUntil(() =>
+                Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame);
+        }
+    }
+
+    private IEnumerator RunTurn(bool isAI)
+    {
+        StoneLauncher launcher;
+        GameObject go = SpawnThrower(isAI, out launcher);
+        currentStone = go;
+        forceEndTurn = false;
+
+        // Wait for the shot to be released (or a forced skip)...
+        yield return new WaitUntil(() => launcher.HasBeenShot || forceEndTurn);
+
+        // ...then for it (and any stones it bumped) to come to rest, unless the turn is
+        // forced or the safety timeout fires.
+        if (!forceEndTurn)
+        {
+            float elapsed = 0f;
+            yield return new WaitUntil(() =>
+                (launcher.ShotFinished && AllMatchStonesSettled()) ||
+                forceEndTurn ||
+                (elapsed += Time.deltaTime) > 20f);
+        }
+
+        currentStone = null;
+
+        if (!launcher.HasBeenShot)
+        {
+            // Skipped before the stone was ever thrown - discard it.
+            Destroy(go);
+            forceEndTurn = false;
+            yield break;
+        }
+
+        if (forceEndTurn)
+            NeutralizeStone(go); // stop a runaway/stuck stone where it is
+
+        if (isAI) aiStones.Add(go); else playerStones.Add(go);
+        forceEndTurn = false;
+    }
+
+    private GameObject SpawnThrower(bool isAI, out StoneLauncher launcher)
+    {
+        GameObject prefab = isAI ? enemyStonePrefab : playerStonePrefab;
+        GameObject go = Instantiate(prefab, stoneStartPoint.position, stoneStartPoint.rotation);
+
+        // Wire everything BEFORE the object goes live, so StoneLauncher.OnEnable
+        // subscribes to a provider that is already assigned.
+        go.SetActive(false);
+
+        // Guard against a prefab that already carries shot scripts (e.g. if the scene stone
+        // instance was assigned instead of the clean prefab). Without this the clone would
+        // keep its own StoneLauncher/provider AND get the fresh pair below -> two impulses,
+        // i.e. the stone launches twice as strong. Strip any pre-existing pair first.
+        StripShotComponents(go);
+
+        launcher = go.AddComponent<StoneLauncher>();
+        // Match the scene player stone's physics tuning when available.
+        launcher.curlDegreesPerMeter = stone != null ? stone.curlDegreesPerMeter : launcher.curlDegreesPerMeter;
+        launcher.preShotSpinSpeed    = stone != null ? stone.preShotSpinSpeed    : launcher.preShotSpinSpeed;
+        launcher.slideDrag           = stone != null ? stone.slideDrag           : launcher.slideDrag;
+        launcher.stopThreshold       = stone != null ? stone.stopThreshold       : launcher.stopThreshold;
+
+        if (isAI)
+        {
+            FakeAIShotProvider ai = go.AddComponent<FakeAIShotProvider>();
+            ai.basePower         = aiBasePower;
+            ai.powerJitter       = aiPowerJitter;
+            ai.baseCurl          = aiBaseCurl;
+            ai.curlJitter        = aiCurlJitter;
+            ai.thinkDelaySeconds = aiThinkDelay;
+            ai.target            = houseCenter;
+            launcher.shotProviderSource = ai;
+
+            // No human aiming this turn: banner only, no live HUD.
+            if (soloCurlingUI != null)
+            {
+                soloCurlingUI.SetActiveShot(launcher, null);
+                soloCurlingUI.SetBanner($"AI is throwing... ({CountThrown(true)}/{stonesPerSide})");
+            }
+        }
+        else
+        {
+            PlayerShotProvider player = go.AddComponent<PlayerShotProvider>();
+            player.minPower = playerMinPower;
+            player.maxPower = playerMaxPower;
+            player.aimArrow = matchAimArrow;
+            launcher.shotProviderSource = player;
+
+            // Point the HUD at the stone the player is currently aiming.
+            if (soloCurlingUI != null)
+            {
+                soloCurlingUI.SetActiveShot(launcher, player);
+                soloCurlingUI.SetBanner($"Your throw ({CountThrown(false)}/{stonesPerSide}) - arrows aim/power, Q/E curl, Space to shoot");
+            }
+        }
+
+        go.SetActive(true); // now Awake/OnEnable run with everything wired
+        return go;
+    }
+
+    // Remove any shot scripts already on a freshly instantiated stone so exactly one
+    // StoneLauncher + one provider drive it. DestroyImmediate (not Destroy) because the
+    // stone is re-activated in the same call and deferred destruction would let the stale
+    // components' OnEnable run and subscribe. The stone is inactive here, so no OnEnable has
+    // fired yet on these.
+    private static void StripShotComponents(GameObject go)
+    {
+        foreach (var c in go.GetComponentsInChildren<StoneLauncher>(true))       DestroyImmediate(c);
+        foreach (var c in go.GetComponentsInChildren<PlayerShotProvider>(true))  DestroyImmediate(c);
+        foreach (var c in go.GetComponentsInChildren<FakeAIShotProvider>(true))  DestroyImmediate(c);
+    }
+
+    private int CountThrown(bool isAI) => (isAI ? aiStones.Count : playerStones.Count) + 1;
+
+    private bool AllMatchStonesSettled()
+    {
+        return StonesSettled(playerStones) && StonesSettled(aiStones);
+    }
+
+    private bool StonesSettled(List<GameObject> stones)
+    {
+        foreach (var s in stones)
+        {
+            if (s == null) continue;
+            Rigidbody rb = s.GetComponent<Rigidbody>();
+            if (rb != null && rb.linearVelocity.magnitude > 0.01f)
+                return false;
+        }
+        return true;
+    }
+
+    private void ClearMatchStones()
+    {
+        foreach (var s in playerStones) if (s != null) Destroy(s);
+        foreach (var s in aiStones)     if (s != null) Destroy(s);
+        if (currentStone != null) Destroy(currentStone);
+        playerStones.Clear();
+        aiStones.Clear();
+        lostStones.Clear();
+        currentStone = null;
+        forceEndTurn = false;
+    }
+
+    // Standard curling end scoring: the side with the nearest stone scores one point
+    // for every one of its stones closer to the button than the opponent's nearest.
+    private string ComputeMatchResult()
+    {
+        Vector3 center = houseCenter.position;
+        center.y = 0f;
+
+        float playerNearest = NearestDistance(playerStones, center);
+        float aiNearest      = NearestDistance(aiStones, center);
+
+        if (playerNearest == float.MaxValue && aiNearest == float.MaxValue)
+            return "No stones in play - draw.";
+
+        bool playerWon = playerNearest <= aiNearest;
+        float opponentNearest = playerWon ? aiNearest : playerNearest;
+        List<GameObject> winners = playerWon ? playerStones : aiStones;
+
+        int points = 0;
+        foreach (var s in winners)
+        {
+            if (s == null || lostStones.Contains(s)) continue;
+            Vector3 p = s.transform.position;
+            p.y = 0f;
+            if (Vector3.Distance(p, center) < opponentNearest)
+                points++;
+        }
+
+        string who = playerWon ? "You" : "AI";
+        return $"{who} score {points}  (you: {Readable(playerNearest)}, AI: {Readable(aiNearest)})";
+    }
+
+    private static string Readable(float dist) =>
+        dist == float.MaxValue ? "-" : dist.ToString("F2");
+
+    private float NearestDistance(List<GameObject> stones, Vector3 center)
+    {
+        float best = float.MaxValue;
+        foreach (var s in stones)
+        {
+            if (s == null || lostStones.Contains(s)) continue;
+            Vector3 p = s.transform.position;
+            p.y = 0f;
+            float d = Vector3.Distance(p, center);
+            if (d < best) best = d;
+        }
+        return best;
     }
 
     private void AssignEnemyTag(GameObject target)
