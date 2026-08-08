@@ -409,35 +409,6 @@ Transform:
   - {fileID: 215288550}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &121520970
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 2236453764051679029, guid: c3e8d8c10ebde0f42a30fe0f46bd3a1c, type: 3}
-  m_PrefabInstance: {fileID: 1286296519}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &47250198
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 47250197}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9fb59ce0a095b014d896ebc99ea5d6af, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerTagAssigner
-  playerTag: Player
---- !u!1001 &611696112
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &215288549
 GameObject:
   m_ObjectHideFlags: 0
@@ -954,8 +925,14 @@ MonoBehaviour:
   launchForce: 10
   useDistanceBasedForce: 1
   forceMode: 1
-  calibrationDistanceCoefficient: 0.1051
-  calibrationForceExponent: 1.6756
+  assumedStoneDynamicFriction: 0.6
+  surfaceDynamicFriction: 0.02
+  frictionCombine: 0
+  frictionModelExponent: 1.6756
+  frictionModelScale: 0.639
+  compensateWithReferencePoint: 1
+  referenceImpulse: 70
+  referenceDistance: 233.8326
   minimumDistanceBasedForce: 5.97
   maximumDistanceBasedForce: 100
 --- !u!114 &1227311876
@@ -1105,10 +1082,7 @@ PrefabInstance:
     - {fileID: 1494803274558186332, guid: c3e8d8c10ebde0f42a30fe0f46bd3a1c, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 2236453764051679029, guid: c3e8d8c10ebde0f42a30fe0f46bd3a1c, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 47250198}
+    m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: c3e8d8c10ebde0f42a30fe0f46bd3a1c, type: 3}
 --- !u!1 &1457684718
 GameObject:
@@ -1252,7 +1226,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1492ee1e1a7bb664ca42f37c9f9dfdf4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SoloCurlingGameManager
-  stone: {fileID: 8027742036371559162}
+  stone: {fileID: 8027742036371559166}
   houseCenter: {fileID: 637207734}
   stoneStartPoint: {fileID: 912073182}
   enemyStonePrefab: {fileID: 2236453764051679029, guid: 36e1e077170708b41963330faa0e5a70, type: 3}
@@ -1279,24 +1253,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 673811803}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1701650085 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 2236453764051679029, guid: c3e8d8c10ebde0f42a30fe0f46bd3a1c, type: 3}
-  m_PrefabInstance: {fileID: 611696112}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &1701650086
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1701650085}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9fb59ce0a095b014d896ebc99ea5d6af, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerTagAssigner
-  playerTag: Player
 --- !u!1 &1789116931
 GameObject:
   m_ObjectHideFlags: 0
@@ -1455,7 +1411,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b2e91cd51cf3eb442bcc3e309d41146b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SoloCurlingUI
-  stone: {fileID: 8027742036371559162}
+  stone: {fileID: 8027742036371559166}
+  provider: {fileID: 8027742036371559165}
   gameManager: {fileID: 1556265698}
   infoText: {fileID: 39661338}
 --- !u!1 &2060920602
@@ -1648,7 +1605,10 @@ PrefabInstance:
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 2236453764051679029, guid: c3e8d8c10ebde0f42a30fe0f46bd3a1c, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 8027742036371559162}
+      addedObject: {fileID: 8027742036371559166}
+    - targetCorrespondingSourceObject: {fileID: 2236453764051679029, guid: c3e8d8c10ebde0f42a30fe0f46bd3a1c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 8027742036371559165}
   m_SourcePrefab: {fileID: 100100000, guid: c3e8d8c10ebde0f42a30fe0f46bd3a1c, type: 3}
 --- !u!1001 &7939078254479096740
 PrefabInstance:
@@ -1716,7 +1676,7 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 2236453764051679029, guid: c3e8d8c10ebde0f42a30fe0f46bd3a1c, type: 3}
   m_PrefabInstance: {fileID: 7630063734690356478}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &8027742036371559162
+--- !u!114 &8027742036371559165
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1725,23 +1685,36 @@ MonoBehaviour:
   m_GameObject: {fileID: 8027742036371559161}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c09f6b8943366304ba021bbb7e5bd65a, type: 3}
+  m_Script: {fileID: 11500000, guid: a383f55b243638d4cb10b43e81022c63, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::CurlingStoneController
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerShotProvider
   aimSpeed: 60
   maxAimAngle: 45
   minPower: 5
-  maxPower: 40
+  maxPower: 30
   powerChangeSpeed: 10
   maxCurlPower: 5
   curlChangeSpeed: 3
-  curlDegreesPerMeter: 0.05
-  preShotSpinSpeed: 1
   aimArrow: {fileID: 849098006}
   arrowYOffset: 0.05
   arrowForwardOffset: 2
+--- !u!114 &8027742036371559166
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8027742036371559161}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 419d8858806c44041879866ede3d492a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StoneLauncher
+  curlDegreesPerMeter: 0.5
+  preShotSpinSpeed: 2
   slideDrag: 0.001
   stopThreshold: 0.05
+  shotProviderSource: {fileID: 8027742036371559165}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -1749,8 +1722,9 @@ SceneRoots:
   - {fileID: 2060920605}
   - {fileID: 635152823}
   - {fileID: 44235560}
-  - {fileID: 121520973}
   - {fileID: 673811803}
   - {fileID: 7630063734690356478}
   - {fileID: 7939078254479096740}
   - {fileID: 115532774}
+  - {fileID: 1257696554}
+  - {fileID: 1286296519}

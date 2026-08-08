@@ -1,0 +1,156 @@
+using UnityEngine;
+
+/// <summary>
+/// The "physics half" of a curling throw, split out of the old
+/// <c>CurlingStoneController</c>. It listens to an <see cref="IShotProvider"/> for a
+/// committed <see cref="ShotData"/> and executes it: applies the launch impulse and
+/// pre-shot spin, simulates the curl during the slide, and detects when the stone stops.
+///
+/// It is source-agnostic — the same launcher works for the human player today and for an
+/// AI provider on a later branch, because it only ever sees <see cref="ShotData"/>.
+/// </summary>
+[RequireComponent(typeof(Rigidbody))]
+public class StoneLauncher : MonoBehaviour
+{
+    [Header("Curl")]
+    // Heading deflection per meter traveled per unit of curl.
+    // Positive curl = curl RIGHT relative to the stone's direction of travel.
+    public float curlDegreesPerMeter = 0.5f;
+
+    [Header("Pre-shot Spin")]
+    // rad/s of Y-axis spin per curl unit — clockwise (viewed from above) for positive curl.
+    public float preShotSpinSpeed = 2f;
+
+    [Header("Physics")]
+    public float slideDrag = 0.001f;     // drag applied once the stone is shot
+    public float stopThreshold = 0.05f;
+
+    [Header("Shot Source")]
+    // A component implementing IShotProvider (e.g. PlayerShotProvider). Serialized as a
+    // MonoBehaviour so any provider can be wired in from the inspector without this
+    // launcher naming a concrete type.
+    public MonoBehaviour shotProviderSource;
+
+    private Rigidbody rb;
+    private Vector3 startPosition;
+    private Quaternion startRotation;
+
+    private IShotProvider provider;
+
+    // The committed shot, stashed from ShotReady and applied on the next FixedUpdate so
+    // the impulse is visible to the physics engine before the stop-check runs.
+    private ShotData pendingShot;
+    private bool shootPending = false;
+    private float activeCurl = 0f; // curl of the shot currently in flight
+
+    public bool HasBeenShot  { get; private set; } = false;
+    public bool ShotFinished { get; private set; } = false;
+
+    private void Awake()
+    {
+        rb = GetComponent<Rigidbody>();
+        startPosition = transform.position;
+        startRotation = transform.rotation;
+
+        rb.linearVelocity  = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
+        rb.constraints     = RigidbodyConstraints.FreezePosition;
+    }
+
+    private void OnEnable()
+    {
+        provider = shotProviderSource as IShotProvider;
+        if (provider == null && shotProviderSource != null)
+            Debug.LogError($"{nameof(StoneLauncher)}: assigned shotProviderSource does not implement IShotProvider.", this);
+
+        if (provider != null)
+            provider.ShotReady += OnShotReady;
+    }
+
+    private void OnDisable()
+    {
+        if (provider != null)
+            provider.ShotReady -= OnShotReady;
+    }
+
+    // Queue the shot; it is applied in the next FixedUpdate.
+    private void OnShotReady(ShotData shot)
+    {
+        if (HasBeenShot)
+            return;
+        pendingShot  = shot;
+        shootPending = true;
+    }
+
+    private void FixedUpdate()
+    {
+        // Apply the queued shot inside FixedUpdate so the impulse velocity is visible to
+        // the physics engine before the stop-check runs.
+        if (shootPending)
+        {
+            shootPending     = false;
+            HasBeenShot      = true;
+            activeCurl       = pendingShot.Curl;
+            rb.constraints   = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+            rb.linearDamping = slideDrag;
+            rb.AddForce(pendingShot.Direction * pendingShot.Power, ForceMode.Impulse);
+            // Set spin once at launch — positive curl spins clockwise (right curl).
+            // Let angular damping decay it naturally; do NOT override each frame.
+            rb.angularVelocity = new Vector3(0f, activeCurl * preShotSpinSpeed, 0f);
+            return; // skip stop-check this frame; velocity is updated after physics step
+        }
+
+        if (!HasBeenShot || ShotFinished)
+        {
+            if (!HasBeenShot)
+            {
+                rb.linearVelocity  = Vector3.zero;
+                // Spin stone for visual pre-shot feedback, driven by the live aim curl.
+                float previewCurl  = provider != null ? provider.CurrentShot.Curl : 0f;
+                rb.angularVelocity = new Vector3(0f, previewCurl * preShotSpinSpeed, 0f);
+            }
+            return;
+        }
+
+        // Detect stop
+        if (rb.linearVelocity.magnitude <= stopThreshold)
+        {
+            rb.linearVelocity  = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            ShotFinished = true;
+            return;
+        }
+
+        // Curl: deflect the velocity heading by a small angle each physics step.
+        // angleDeg > 0 → stone curves RIGHT relative to its direction of travel.
+        // Speed is preserved (rotation keeps vector length constant).
+        if (Mathf.Abs(activeCurl) > 0.001f)
+        {
+            float speed        = rb.linearVelocity.magnitude;
+            float distThisStep = speed * Time.fixedDeltaTime;
+            float angleDeg     = activeCurl * curlDegreesPerMeter * distThisStep;
+            rb.linearVelocity  = Quaternion.Euler(0f, angleDeg, 0f) * rb.linearVelocity;
+        }
+    }
+
+    /// <summary>
+    /// Reset the stone to its start pose and re-arm the shot provider for a new throw.
+    /// </summary>
+    public void ResetStone()
+    {
+        HasBeenShot   = false;
+        ShotFinished  = false;
+        shootPending  = false;
+        activeCurl    = 0f;
+
+        rb.linearVelocity  = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
+        rb.linearDamping   = 0f;
+        rb.constraints     = RigidbodyConstraints.FreezePosition;
+
+        transform.position = startPosition;
+        transform.rotation = startRotation;
+
+        provider?.Rearm();
+    }
+}

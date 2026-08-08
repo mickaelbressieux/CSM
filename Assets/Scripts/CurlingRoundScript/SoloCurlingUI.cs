@@ -3,21 +3,23 @@ using TMPro;
 
 public class SoloCurlingUI : MonoBehaviour
 {
-    public CurlingStoneController stone;
+    public StoneLauncher stone;               // shot state (HasBeenShot / ShotFinished)
+    public PlayerShotProvider provider;        // live aim / power / curl for the HUD
     public SoloCurlingGameManager gameManager;
     public TMP_Text infoText;
 
     private void Update()
     {
-        if (stone == null || gameManager == null || infoText == null)
+        if (stone == null || provider == null || gameManager == null || infoText == null)
             return;
 
         if (!stone.HasBeenShot)
         {
-            float power      = stone.GetCurrentPower();
-            float curl       = stone.GetCurlAmount();
-            float maxCurl    = stone.maxCurlPower;
-            Vector3 aim      = stone.GetAimDirection();
+            ShotData shot    = provider.CurrentShot;
+            float power      = shot.Power;
+            float curl       = shot.Curl;
+            float maxCurl    = provider.maxCurlPower;
+            Vector3 aim      = shot.Direction;
 
             string curlBar = CurlBar(curl, maxCurl);
 

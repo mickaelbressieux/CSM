@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 public class SoloCurlingGameManager : MonoBehaviour
 {
     [Header("References")]
-    public CurlingStoneController stone;
+    public StoneLauncher stone;
     public Transform houseCenter;
     public Transform stoneStartPoint;
 
