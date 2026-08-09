@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 
 public class SoloCurlingGameManager : MonoBehaviour
 {
@@ -17,10 +18,19 @@ public class SoloCurlingGameManager : MonoBehaviour
     public Transform houseCenter;
     public Transform stoneStartPoint;
 
-    [Header("Match Mode (temp showcase)")]
+    [Header("Stones (both modes spawn from prefabs)")]
     public GameObject playerStonePrefab;      // white Stone Curling prefab (AI reuses enemyStonePrefab)
-    public CurlingUIManager soloCurlingUI;    // the single UI; match mode drives its banner + active shot
-    public GameObject matchAimArrow;          // optional aim arrow for the player's match turns
+    [FormerlySerializedAs("matchAimArrow")]
+    public GameObject aimArrowPrefab;         // aim-preview PREFAB; instantiated per player stone
+    public CurlingUIManager soloCurlingUI;    // the single UI; driven with banner + active shot
+
+    [Header("Spawned stone physics (fallback if no scene 'stone' template)")]
+    public float stoneCurlDegreesPerMeter = 0.5f;
+    public float stonePreShotSpinSpeed    = 2f;
+    public float stoneSlideDrag           = 0.001f;
+    public float stoneStopThreshold       = 0.05f;
+
+    [Header("Match Mode (temp showcase)")]
     public int stonesPerSide = 3;
 
     [Header("Match - recovery")]
@@ -57,6 +67,7 @@ public class SoloCurlingGameManager : MonoBehaviour
     private HashSet<GameObject> lostStones = new HashSet<GameObject>();
     private GameObject currentStone;      // the stone in play this turn (not yet in a side list)
     private bool forceEndTurn;            // set when the user forces the current turn to end
+    private StoneLauncher playerLauncher; // the spawned player stone (test mode: HUD + scoring)
     private float stoneGroundY;
     private bool warnedMissingEnemyTag;
 
@@ -65,22 +76,32 @@ public class SoloCurlingGameManager : MonoBehaviour
 
     private void Start()
     {
+        // Both modes spawn their stones from prefabs; the pre-placed scene stone is now only a
+        // tuning template (see BuildStone) and is never launched. Disable it so it can't interfere.
+        if (stone != null) stone.gameObject.SetActive(false);
+        // Drive the shared UI even if it wasn't wired in the inspector.
+        if (soloCurlingUI == null) soloCurlingUI = FindFirstObjectByType<CurlingUIManager>();
+        stoneGroundY = stoneStartPoint != null ? stoneStartPoint.position.y : 0f;
+
         if (mode == GameMode.Match)
         {
-            // In match mode the pre-placed scene stone is unused; every stone is spawned.
-            if (stone != null) stone.gameObject.SetActive(false);
-            // Drive the shared UI even if it wasn't wired in the inspector.
-            if (soloCurlingUI == null) soloCurlingUI = FindFirstObjectByType<CurlingUIManager>();
-            stoneGroundY = stoneStartPoint != null ? stoneStartPoint.position.y : 0f;
             StartCoroutine(RunMatch());
             return;
         }
 
-        if (stoneStartPoint != null)
-            stone.transform.position = stoneStartPoint.position;
-
-        stoneGroundY = stone.transform.position.y;
+        // Test-drop: spawn the player stone from the prefab, then drop the enemies.
+        SpawnTestPlayerStone();
         SpawnEnemyStones();
+    }
+
+    private void SpawnTestPlayerStone()
+    {
+        StoneLauncher launcher;
+        PlayerShotProvider player;
+        BuildStone(false, out launcher, out player);
+        playerLauncher = launcher;
+        if (soloCurlingUI != null)
+            soloCurlingUI.SetActiveShot(launcher, player);
     }
 
     private void Update()
@@ -94,10 +115,10 @@ public class SoloCurlingGameManager : MonoBehaviour
             return;
         }
 
-        if (stone == null || houseCenter == null)
+        if (playerLauncher == null || houseCenter == null)
             return;
 
-        if (stone.ShotFinished && !resultProcessed && AllEnemiesStopped())
+        if (playerLauncher.ShotFinished && !resultProcessed && AllEnemiesStopped())
         {
             lastScore = ComputeScore();
             resultProcessed = true;
@@ -121,9 +142,9 @@ public class SoloCurlingGameManager : MonoBehaviour
             if (erb != null) { erb.linearVelocity = Vector3.zero; erb.angularVelocity = Vector3.zero; }
         }
 
-        stone.ResetStone();
-        if (stoneStartPoint != null)
-            stone.transform.position = stoneStartPoint.position;
+        // Fresh player stone (its aim arrow is destroyed with it).
+        if (playerLauncher != null) DestroyStoneAndArrow(playerLauncher.gameObject);
+        SpawnTestPlayerStone();
         resultProcessed = false;
         lastScore = 0;
         SpawnEnemyStones();
@@ -255,7 +276,7 @@ public class SoloCurlingGameManager : MonoBehaviour
         Vector3 center = houseCenter.position;
         center.y = 0f;
 
-        Vector3 playerPos = stone.transform.position;
+        Vector3 playerPos = playerLauncher.transform.position;
         playerPos.y = 0f;
         float playerDist = Vector3.Distance(playerPos, center);
 
@@ -279,10 +300,10 @@ public class SoloCurlingGameManager : MonoBehaviour
 
     public float GetDistanceToCenter()
     {
-        if (stone == null || houseCenter == null)
+        if (playerLauncher == null || houseCenter == null)
             return -1f;
 
-        Vector3 stonePos  = stone.transform.position;
+        Vector3 stonePos  = playerLauncher.transform.position;
         Vector3 targetPos = houseCenter.position;
 
         stonePos.y  = 0f;
@@ -326,9 +347,19 @@ public class SoloCurlingGameManager : MonoBehaviour
     private IEnumerator RunTurn(bool isAI)
     {
         StoneLauncher launcher;
-        GameObject go = SpawnThrower(isAI, out launcher);
+        PlayerShotProvider player;
+        GameObject go = BuildStone(isAI, out launcher, out player);
         currentStone = go;
         forceEndTurn = false;
+
+        if (soloCurlingUI != null)
+        {
+            // Player turns show the live aim HUD; AI turns show a banner only.
+            soloCurlingUI.SetActiveShot(launcher, isAI ? null : player);
+            soloCurlingUI.SetBanner(isAI
+                ? $"AI is throwing... ({CountThrown(true)}/{stonesPerSide})"
+                : $"Your throw ({CountThrown(false)}/{stonesPerSide}) - arrows aim/power, Q/E curl, Space to shoot");
+        }
 
         // Wait for the shot to be released (or a forced skip)...
         yield return new WaitUntil(() => launcher.HasBeenShot || forceEndTurn);
@@ -349,7 +380,7 @@ public class SoloCurlingGameManager : MonoBehaviour
         if (!launcher.HasBeenShot)
         {
             // Skipped before the stone was ever thrown - discard it.
-            Destroy(go);
+            DestroyStoneAndArrow(go);
             forceEndTurn = false;
             yield break;
         }
@@ -361,7 +392,11 @@ public class SoloCurlingGameManager : MonoBehaviour
         forceEndTurn = false;
     }
 
-    private GameObject SpawnThrower(bool isAI, out StoneLauncher launcher)
+    // Instantiate a stone from the right prefab and attach exactly one StoneLauncher plus the
+    // appropriate provider. For a human, also instantiate an aim-arrow instance from the prefab
+    // (a prefab asset can't be shown/moved directly - it must be spawned into the scene). Used by
+    // BOTH modes; the caller decides UI banners. Returns the now-active stone.
+    private GameObject BuildStone(bool isAI, out StoneLauncher launcher, out PlayerShotProvider player)
     {
         GameObject prefab = isAI ? enemyStonePrefab : playerStonePrefab;
         GameObject go = Instantiate(prefab, stoneStartPoint.position, stoneStartPoint.rotation);
@@ -371,18 +406,18 @@ public class SoloCurlingGameManager : MonoBehaviour
         go.SetActive(false);
 
         // Guard against a prefab that already carries shot scripts (e.g. if the scene stone
-        // instance was assigned instead of the clean prefab). Without this the clone would
-        // keep its own StoneLauncher/provider AND get the fresh pair below -> two impulses,
-        // i.e. the stone launches twice as strong. Strip any pre-existing pair first.
+        // instance was assigned instead of the clean prefab) - otherwise the clone would keep its
+        // own StoneLauncher/provider AND get the fresh pair below -> two impulses / double strength.
         StripShotComponents(go);
 
         launcher = go.AddComponent<StoneLauncher>();
-        // Match the scene player stone's physics tuning when available.
-        launcher.curlDegreesPerMeter = stone != null ? stone.curlDegreesPerMeter : launcher.curlDegreesPerMeter;
-        launcher.preShotSpinSpeed    = stone != null ? stone.preShotSpinSpeed    : launcher.preShotSpinSpeed;
-        launcher.slideDrag           = stone != null ? stone.slideDrag           : launcher.slideDrag;
-        launcher.stopThreshold       = stone != null ? stone.stopThreshold       : launcher.stopThreshold;
+        // Tuning: prefer the scene 'stone' template if present, else the serialized fallbacks.
+        launcher.curlDegreesPerMeter = stone != null ? stone.curlDegreesPerMeter : stoneCurlDegreesPerMeter;
+        launcher.preShotSpinSpeed    = stone != null ? stone.preShotSpinSpeed    : stonePreShotSpinSpeed;
+        launcher.slideDrag           = stone != null ? stone.slideDrag           : stoneSlideDrag;
+        launcher.stopThreshold       = stone != null ? stone.stopThreshold       : stoneStopThreshold;
 
+        player = null;
         if (isAI)
         {
             FakeAIShotProvider ai = go.AddComponent<FakeAIShotProvider>();
@@ -393,28 +428,20 @@ public class SoloCurlingGameManager : MonoBehaviour
             ai.thinkDelaySeconds = aiThinkDelay;
             ai.target            = houseCenter;
             launcher.shotProviderSource = ai;
-
-            // No human aiming this turn: banner only, no live HUD.
-            if (soloCurlingUI != null)
-            {
-                soloCurlingUI.SetActiveShot(launcher, null);
-                soloCurlingUI.SetBanner($"AI is throwing... ({CountThrown(true)}/{stonesPerSide})");
-            }
         }
         else
         {
-            PlayerShotProvider player = go.AddComponent<PlayerShotProvider>();
+            player = go.AddComponent<PlayerShotProvider>();
             player.minPower = playerMinPower;
             player.maxPower = playerMaxPower;
-            player.aimArrow = matchAimArrow;
-            launcher.shotProviderSource = player;
 
-            // Point the HUD at the stone the player is currently aiming.
-            if (soloCurlingUI != null)
-            {
-                soloCurlingUI.SetActiveShot(launcher, player);
-                soloCurlingUI.SetBanner($"Your throw ({CountThrown(false)}/{stonesPerSide}) - arrows aim/power, Q/E curl, Space to shoot");
-            }
+            // Spawn a private aim-arrow instance for this stone. NOT parented to the stone: the
+            // stone prefab is scaled to 0.06, so a child would inherit that scale (invisibly tiny)
+            // and its pre-shot spin. It lives at world scale and is positioned each frame by the
+            // provider; DestroyStoneAndArrow() cleans it up with the stone.
+            if (aimArrowPrefab != null)
+                player.aimArrow = Instantiate(aimArrowPrefab, go.transform.position, aimArrowPrefab.transform.rotation);
+            launcher.shotProviderSource = player;
         }
 
         go.SetActive(true); // now Awake/OnEnable run with everything wired
@@ -454,14 +481,23 @@ public class SoloCurlingGameManager : MonoBehaviour
 
     private void ClearMatchStones()
     {
-        foreach (var s in playerStones) if (s != null) Destroy(s);
-        foreach (var s in aiStones)     if (s != null) Destroy(s);
-        if (currentStone != null) Destroy(currentStone);
+        foreach (var s in playerStones) DestroyStoneAndArrow(s);
+        foreach (var s in aiStones)     DestroyStoneAndArrow(s);
+        DestroyStoneAndArrow(currentStone);
         playerStones.Clear();
         aiStones.Clear();
         lostStones.Clear();
         currentStone = null;
         forceEndTurn = false;
+    }
+
+    // Destroy a stone and the aim-arrow instance it owns (if any). Safe on null / AI stones.
+    private void DestroyStoneAndArrow(GameObject go)
+    {
+        if (go == null) return;
+        PlayerShotProvider p = go.GetComponent<PlayerShotProvider>();
+        if (p != null && p.aimArrow != null) Destroy(p.aimArrow);
+        Destroy(go);
     }
 
     // Standard curling end scoring: the side with the nearest stone scores one point
