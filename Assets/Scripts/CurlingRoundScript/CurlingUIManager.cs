@@ -16,19 +16,26 @@ using TMPro;
 public class CurlingUIManager : MonoBehaviour
 {
     public StoneLauncher stone;                // active shot state (HasBeenShot / ShotFinished)
-    public PlayerShotProvider provider;        // active human aim / power / curl (null on AI turns)
+    public PlayerShotProvider provider;        // test-mode inspector wiring; match mode overrides via SetActiveShot
     public SoloCurlingGameManager gameManager;
     public TMP_Text infoText;
 
     // Optional override / prefix line. Empty means "no banner".
     private string banner = "";
 
+    // The provider actually driving the HUD. Defaults to the inspector-wired `provider` (test
+    // mode); match mode reassigns it each turn through SetActiveShot, typed to the interface so
+    // any IShotProvider (player or AI) works without the HUD naming a concrete type.
+    private IShotProvider activeProvider;
+
+    private void Awake() => activeProvider = provider;
+
     /// <summary>Point the HUD at the shot currently in play. Pass a null provider when it is not a
     /// human's turn (e.g. the AI is throwing), so the aiming HUD is suppressed.</summary>
-    public void SetActiveShot(StoneLauncher activeStone, PlayerShotProvider activeProvider)
+    public void SetActiveShot(StoneLauncher activeStone, IShotProvider activeShotProvider)
     {
         stone = activeStone;
-        provider = activeProvider;
+        activeProvider = activeShotProvider;
     }
 
     public void SetBanner(string message) => banner = message ?? "";
@@ -42,7 +49,7 @@ public class CurlingUIManager : MonoBehaviour
         string prefix = string.IsNullOrEmpty(banner) ? "" : banner + "\n\n";
 
         // Player is aiming: show the banner (if any) above the live aim / power / curl HUD.
-        if (provider != null && stone != null && !stone.HasBeenShot)
+        if (activeProvider != null && stone != null && !stone.HasBeenShot)
         {
             infoText.text = prefix + AimingHud();
             return;
@@ -71,10 +78,10 @@ public class CurlingUIManager : MonoBehaviour
 
     private string AimingHud()
     {
-        ShotData shot = provider.CurrentShot;
+        ShotData shot = activeProvider.CurrentShot;
         float power   = shot.Power;
         float curl    = shot.Curl;
-        float maxCurl = provider.maxCurlPower;
+        float maxCurl = activeProvider.MaxCurl;
         Vector3 aim   = shot.Direction;
 
         string curlBar = CurlBar(curl, maxCurl);

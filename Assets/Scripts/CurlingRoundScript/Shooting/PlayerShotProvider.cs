@@ -12,7 +12,7 @@ using UnityEngine.InputSystem;
 /// This is one implementation of <see cref="IShotProvider"/>; an AI implementation will
 /// sit behind the same interface on a later branch.
 /// </summary>
-public class PlayerShotProvider : MonoBehaviour, IShotProvider
+public class PlayerShotProvider : MonoBehaviour, IShotProvider, IShotContextReceiver
 {
     [Header("Aiming")]
     public float aimSpeed = 60f;       // degrees per second
@@ -48,6 +48,18 @@ public class PlayerShotProvider : MonoBehaviour, IShotProvider
     /// <inheritdoc/>
     public ShotData CurrentShot =>
         new ShotData(Quaternion.Euler(0f, aimAngle, 0f) * Vector3.forward, currentPower, curlAmount);
+
+    /// <inheritdoc/>
+    public float MaxCurl => maxCurlPower;
+
+    /// <inheritdoc/>
+    // The manager injects the shared aim arrow (a scene object the prefab can't reference).
+    // Ignores a null so a prefab-set arrow is preserved.
+    public void Configure(ShotContext context)
+    {
+        if (context.AimArrow != null)
+            aimArrow = context.AimArrow;
+    }
 
     private void Awake()
     {

@@ -27,6 +27,12 @@ public interface IShotProvider
     ShotData CurrentShot { get; }
 
     /// <summary>
+    /// The maximum curl magnitude this provider can produce, so the HUD can scale its curl
+    /// gauge without knowing the concrete provider type. Always positive.
+    /// </summary>
+    float MaxCurl { get; }
+
+    /// <summary>
     /// Re-arm the provider to accept a fresh shot. Called on round reset, after a shot
     /// has been fired and the stone reset to its start.
     /// </summary>

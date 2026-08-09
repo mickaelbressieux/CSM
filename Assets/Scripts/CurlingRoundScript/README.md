@@ -5,8 +5,9 @@ stone, its sliding/curl physics, turn sequencing, and the on-screen HUD.
 
 The defining idea of this branch (`feature/stone-lauch-abstracted`) is that **a throw is
 decoupled from who decides it**. The old monolithic `CurlingStoneController` has been split
-into three pieces connected by a single event, so the human player and an AI can drive the
-*exact same* launcher without it knowing which is which.
+into pieces connected by a single event, so the human player and an AI can drive the *exact
+same* launcher without it knowing which is which. Both game modes spawn their stones from
+**provider-carrying prefabs**, so switching in a real AI is a prefab swap, not a code change.
 
 ---
 
@@ -25,6 +26,7 @@ A throw is split along one clean seam:
 ```csharp
 event Action<ShotData> ShotReady;   // raised exactly ONCE when the shot is committed
 ShotData CurrentShot { get; }       // the live, in-progress shot — for HUD preview
+float MaxCurl { get; }              // max curl magnitude, so the HUD can scale its gauge
 void Rearm();                       // re-arm to accept a fresh shot on reset
 ```
 
@@ -32,11 +34,25 @@ A provider spends several frames (human) or a "thinking" delay (AI) building a s
 raises `ShotReady` once. `StoneLauncher` subscribes and executes it. Crucially, the launcher
 stores its provider as a plain `MonoBehaviour shotProviderSource` and casts it to
 `IShotProvider` at runtime — so **the launcher never names a concrete provider type**, and any
-provider can be wired in from the inspector (or added at runtime).
+provider can be wired in from the inspector on the prefab.
+
+### Injecting scene context: `IShotContextReceiver`
+
+A prefab can't bake in scene references (what to aim at, the shared aim arrow). So the manager
+hands those to a freshly spawned provider through a second, optional seam
+([`IShotContextReceiver`](Shooting/IShotContextReceiver.cs)):
+
+```csharp
+void Configure(ShotContext context);   // context = { Transform HouseCenter; GameObject AimArrow; }
+```
+
+The AI takes `HouseCenter` as its aim target; the player takes the `AimArrow`. The manager calls
+`Configure` **through the interface**, so it injects context without naming a concrete provider
+type either. Providers that don't need context simply don't implement it.
 
 ### `ShotData`
 
-An immutable `readonly struct` — the only thing that ever crosses the seam:
+An immutable `readonly struct` — the only thing that ever crosses the launch seam:
 
 - `Direction` — normalized world-space aim (the constructor normalizes defensively, falling
   back to `Vector3.forward` for a near-zero vector, so callers can pass a raw
@@ -66,12 +82,13 @@ flowchart TD
 
     F -->|sets| S[HasBeenShot / ShotFinished]
 
-    M[SoloCurlingGameManager<br/>spawns stone, wires ONE launcher<br/>+ ONE provider, sequences turns]
-    M -.->|builds and activates| Providers
+    M[SoloCurlingGameManager<br/>BuildStone: instantiate provider-carrying prefab,<br/>Configure ShotContext, sequence turns]
+    M -.->|spawns & activates| Providers
+    M -.->|Configure scene refs| Providers
     M -.->|polls| S
 
     U[CurlingUIManager]
-    U -.->|reads CurrentShot| Providers
+    U -.->|reads CurrentShot / MaxCurl| Providers
     U -.->|reads HasBeenShot / ShotFinished| S
     M -.->|SetActiveShot / SetBanner| U
 ```
@@ -87,14 +104,15 @@ velocity heading a little each physics step (the curl) until speed drops below
 
 ```
 CurlingRoundScript/
-├── Shooting/                     ← the new shot abstraction
+├── Shooting/                     ← the shot abstraction
 │   ├── ShotData.cs               immutable description of one throw
-│   ├── IShotProvider.cs          seam: ShotReady / CurrentShot / Rearm
+│   ├── IShotProvider.cs          launch seam: ShotReady / CurrentShot / MaxCurl / Rearm
+│   ├── IShotContextReceiver.cs   context seam: Configure(ShotContext) for scene refs
 │   ├── PlayerShotProvider.cs     human input half (keyboard → ShotData)
 │   └── StoneLauncher.cs          physics half (ShotData → impulse, curl, stop)
 ├── AIShotProviderTemp/           ← throwaway demo, meant to be replaced
-│   └── FakeAIShotProvider.cs     a dumb AI proving the seam works
-├── SoloCurlingGameManager.cs     orchestrator: modes, spawning, turn sequencing, scoring
+│   └── FakeAIShotProvider.cs     a dumb AI proving the seams work
+├── SoloCurlingGameManager.cs     orchestrator: modes, prefab spawning, turns, scoring
 ├── CurlingUIManager.cs           single HUD authority (TextMeshPro)
 ├── CameraSwitcher.cs             independent: cycle cameras with Tab
 └── PlayerTagAssigner.cs          independent: assign a tag in edit/play mode
@@ -111,22 +129,29 @@ Curl). Pure data, source-agnostic; produced by any provider, consumed by the lau
 read by the HUD. Depends on nothing but `UnityEngine`.
 
 **[`IShotProvider`](Shooting/IShotProvider.cs)** — the interface every shot source implements:
-the `ShotReady` event, the `CurrentShot` preview getter, and `Rearm()`. This is the only thing
+the `ShotReady` event, the `CurrentShot` preview getter, `MaxCurl` (so the HUD can scale its
+curl gauge without knowing the concrete type), and `Rearm()`. This is the only thing
 `StoneLauncher` and `CurlingUIManager` know about a shot source.
 
+**[`IShotContextReceiver`](Shooting/IShotContextReceiver.cs)** — an optional second interface
+plus the `ShotContext` struct. Lets the manager pass per-turn scene references (house center,
+aim arrow) into a provider without naming a concrete type. Implemented by both providers today.
+
 **[`PlayerShotProvider`](Shooting/PlayerShotProvider.cs)** — the human input half
-(`MonoBehaviour, IShotProvider`). Each `Update` reads the keyboard (← → aim, ↑ ↓ power, Q/E
-curl) and updates the aim-preview arrow; **Space** commits the shot via `CommitShot()`, which
-raises `ShotReady`. An `armed` flag flips off the instant Space is pressed so a shot can't fire
-twice until `Rearm()`. Knows nothing about physics.
+(`MonoBehaviour, IShotProvider, IShotContextReceiver`). Each `Update` reads the keyboard (← →
+aim, ↑ ↓ power, Q/E curl) and updates the aim-preview arrow; **Space** commits the shot via
+`CommitShot()`, which raises `ShotReady`. An `armed` flag flips off the instant Space is pressed
+so a shot can't fire twice until `Rearm()`. `Configure` receives the aim arrow the manager spawns
+for this stone. Knows nothing about physics.
 
 **[`FakeAIShotProvider`](AIShotProviderTemp/FakeAIShotProvider.cs)** — a **temporary,
-throwaway** demo (`MonoBehaviour, IShotProvider`), explicitly *not* the real `AIStoneController`
-(which lives outside this folder and is untouched). `OnEnable` starts the `ThinkThenShoot()`
-coroutine — the manager only activates the stone on the AI's turn, so enabling *is* the cue to
-start deliberating. After `thinkDelaySeconds` it aims flat at its `target` (the house center),
-applies a configurable, optionally jittered power/curl, and raises `ShotReady`. Its whole point
-is to prove a non-human source drops into the same launcher with zero launcher changes.
+throwaway** demo (`MonoBehaviour, IShotProvider, IShotContextReceiver`), explicitly *not* the
+real `AIStoneController` (which lives outside this folder and is untouched). `OnEnable` starts
+the `ThinkThenShoot()` coroutine — the manager only activates the stone on the AI's turn, so
+enabling *is* the cue to start deliberating. After `thinkDelaySeconds` it aims flat at its
+`target` (injected via `Configure` as the house center), applies a configurable, optionally
+jittered power/curl, and raises `ShotReady`. Its whole point is to prove a non-human source
+drops into the same launcher and prefab pipeline with zero launcher/manager changes.
 
 **[`StoneLauncher`](Shooting/StoneLauncher.cs)** — the physics half
 (`[RequireComponent(typeof(Rigidbody))]`). In `OnEnable` it casts `shotProviderSource` to
@@ -139,36 +164,35 @@ which restores the start pose and calls `provider?.Rearm()`.
 ### Orchestration & UI
 
 **[`SoloCurlingGameManager`](SoloCurlingGameManager.cs)** — the orchestrator, with two modes
-(`GameMode { TestDrop, Match }`):
+(`GameMode { TestDrop, Match }`). **Both modes spawn every stone from a prefab** via `BuildStone`;
+the pre-placed scene `stone` is disabled and never launched.
 
-- **TestDrop** (original showcase): spawns `enemyStoneCount` enemy stones at random
-  non-overlapping positions around the house; the player throws the single pre-placed scene
-  stone; `ComputeScore()` gives +1 if the player is closest, else −1 per closer enemy. **R**
-  resets.
-- **Match** (temp turn-based round): the pre-placed stone is disabled and *every* stone is
-  spawned at runtime. `RunMatch()` loops → `RunTurn(isAI)` per throw (`i % 2 == 0` is the AI,
-  so the **AI throws first**), `stonesPerSide * 2` throws total → `ComputeMatchResult()`
+- **`BuildStone(isAI, out launcher, out provider)`** is the shared spawn path. It instantiates
+  the right prefab (`playerStonePrefab` / `aiStonePrefab`), reads the `StoneLauncher` and its
+  wired `IShotProvider` off the prefab, spawns a per-stone aim-arrow instance for a human, and
+  calls `Configure(new ShotContext(houseCenter, aimArrow))` — **without naming a concrete
+  provider type**. A misconfigured prefab logs a clear error and the turn is skipped rather than
+  crashing. (Tuning now lives on the prefab; there is no runtime `AddComponent` or component
+  stripping.)
+- **TestDrop** (original showcase): `SpawnTestPlayerStone` builds one player stone (tracked in
+  `playerLauncher`) and `SpawnEnemyStones` drops `enemyStoneCount` plain obstacle stones from
+  `enemyStonePrefab`; `ComputeScore()` gives +1 if the player is closest, else −1 per closer
+  enemy. **R** resets.
+- **Match** (temp turn-based round): `RunMatch()` loops → `RunTurn(isAI)` per throw (`i % 2 == 0`
+  is the AI, so the **AI throws first**), `stonesPerSide * 2` throws total → `ComputeMatchResult()`
   (standard curling end scoring, excluding stones that fell off the sheet) → banner → **R** to
-  replay.
-
-  The abstraction is assembled in **`SpawnThrower`**: instantiate the prefab *inactive*, run
-  `StripShotComponents` (a `DestroyImmediate` guard so a prefab that already carries shot
-  scripts can't end up with two launcher/provider pairs and a **double-strength impulse**),
-  `AddComponent<StoneLauncher>()`, copy physics tuning from the scene `stone`, add either a
-  `FakeAIShotProvider` or a `PlayerShotProvider`, assign `launcher.shotProviderSource`, point
-  the UI, then `SetActive(true)` — so `Awake`/`OnEnable` run with everything already wired.
-
-  Recovery: **N** (`forceNextTurnKey`) force-skips a stuck turn; `FixedUpdate` freezes stones
-  that fall below `killY` and snaps slow creepers to a stop.
+  replay. Recovery: **N** (`forceNextTurnKey`) force-skips a stuck turn; `FixedUpdate` freezes
+  stones that fall below `killY` and snaps slow creepers to a stop. `DestroyStoneAndArrow` cleans
+  up a stone together with its aim-arrow instance.
 
 **[`CurlingUIManager`](CurlingUIManager.cs)** — the single HUD authority, rendering both modes
 through one `TMP_Text infoText`. It's driven by an "active shot" (a `StoneLauncher` + optional
-`PlayerShotProvider`) plus an optional banner line. `Update` picks the state from
-`HasBeenShot`/`ShotFinished`: live aiming HUD (power/curl bar/aim, read from
-`provider.CurrentShot` and `provider.maxCurlPower`), "stone is sliding", a banner, or the
+provider) plus an optional banner line, tracked internally as an **`IShotProvider`** so any
+provider works. `Update` picks the state from `HasBeenShot`/`ShotFinished`: live aiming HUD
+(power/curl bar/aim, read from `CurrentShot` and `MaxCurl`), "stone is sliding", a banner, or the
 test-mode result panel. `SetActiveShot(stone, provider)` reassigns it each turn — a **null
-provider suppresses the aiming HUD** (used on AI turns); `SetBanner`/`ClearBanner` drive the
-banner line.
+provider suppresses the aiming HUD** (used on AI turns); the serialized `provider` field is only
+the inspector default for TestDrop and is not broken by the interface routing.
 
 ### Independent utilities
 
@@ -185,8 +209,9 @@ configurable `playerTag` to its GameObject in both edit and play mode (via `OnVa
 ## How a turn plays out (Match mode)
 
 1. `RunMatch()` clears the sheet and loops `stonesPerSide * 2` turns.
-2. `RunTurn(isAI)` calls `SpawnThrower`, which builds a stone carrying **exactly one**
-   `StoneLauncher` + one provider, wired *before* the object is activated.
+2. `RunTurn(isAI)` calls `BuildStone`, which instantiates the provider-carrying prefab, reads its
+   `StoneLauncher` + `IShotProvider`, and injects the `ShotContext` — everything wired *before*
+   the object is activated.
 3. It waits until `launcher.HasBeenShot` (the provider raised `ShotReady`) — or a forced skip.
 4. Then it waits until `launcher.ShotFinished && AllMatchStonesSettled()` (with a 20 s safety
    timeout and the force-skip escape).
@@ -198,18 +223,42 @@ configurable `playerTag` to its GameObject in both edit and play mode (via `OnVa
 
 ## Patterns & conventions
 
-- **The seam is a C# `event Action<ShotData>`**, not a `UnityEvent` — providers announce, the
-  launcher listens.
-- **Interface polymorphism via `shotProviderSource as IShotProvider`** — the launcher is wired
-  to a `MonoBehaviour` and never names a concrete provider.
-- **Polling of public getters** (`HasBeenShot`, `ShotFinished`, `CurrentShot`, `GetLastScore`)
-  for state the manager and UI observe.
+- **Two interface seams:** `IShotProvider` (a C# `event Action<ShotData>`, not a `UnityEvent`)
+  for who-decides-vs-physics, and `IShotContextReceiver` for injecting scene references — both
+  keep the manager and launcher from naming concrete provider types.
+- **Prefab-authored providers:** each stone prefab carries exactly one `StoneLauncher` + one
+  `IShotProvider` with `shotProviderSource` wired, so a new provider (e.g. a real AI) is a prefab,
+  not a manager edit. Tuning lives on the prefab.
+- **Interface polymorphism via `shotProviderSource as IShotProvider`** — the launcher is wired to
+  a `MonoBehaviour` and never names a concrete provider.
+- **Polling of public getters** (`HasBeenShot`, `ShotFinished`, `CurrentShot`, `MaxCurl`,
+  `GetLastScore`) for state the manager and UI observe.
 - **Coroutines** (`RunMatch`, `RunTurn`, `ThinkThenShoot`) with `WaitUntil` / `WaitForSeconds`
   for turn and think sequencing.
 - **New Input System** throughout (`Keyboard.current`).
 - **No singletons** — the manager finds the UI once via `FindFirstObjectByType<CurlingUIManager>()`
   as a fallback and otherwise passes references explicitly.
 
+---
+
+## Extension points (foundations for later work)
+
+Three seams exist so the planned features can be built without touching the launch pipeline:
+
+- **`Stone` entity** ([Shooting/Stone.cs](Shooting/Stone.cs)) — identity (`Side`) + lifecycle
+  (`Phase`: Idle/Sliding/Stopped/Lost) + cached `Body`. The thing systems hang off of instead of
+  raw GameObjects.
+- **Stackable powers** ([Shooting/StoneAbility.cs](Shooting/StoneAbility.cs)) — subclass
+  `StoneAbility` and override any of `OnLaunch` / `OnSlideTick` / `OnStopped` / `OnStoneCollision`.
+  `StoneLauncher` fires each hook on **every** `StoneAbility` on the stone, so powers **stack** by
+  simply adding more components. `OnSlideTick` is the hook for in-flight powers (e.g. "brake on
+  key press"). See the sample [Abilities/ExtraPowerAbility.cs](Shooting/Abilities/ExtraPowerAbility.cs).
+- **Match events** ([Shooting/MatchEvents.cs](Shooting/MatchEvents.cs)) — a static hub raising
+  `TurnStarted` / `StoneReleased` / `StoneStopped` / `StoneLost` / `EndScored`. Anything (a power,
+  the UI, audio) can subscribe in `OnEnable` and unsubscribe in `OnDisable` without wiring a
+  manager reference. `SoloCurlingGameManager` raises them at the turn lifecycle points.
+
 > **Note:** the real AI, `AIStoneController`, lives *outside* this folder and is untouched.
 > Everything under `AIShotProviderTemp/` is a temporary demo and is meant to be deleted or
-> replaced once a real AI provider implements `IShotProvider`.
+> replaced once a real AI provider implements `IShotProvider` (and, if it needs the house center,
+> `IShotContextReceiver`).

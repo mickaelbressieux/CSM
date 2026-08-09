@@ -19,16 +19,14 @@ public class SoloCurlingGameManager : MonoBehaviour
     public Transform stoneStartPoint;
 
     [Header("Stones (both modes spawn from prefabs)")]
-    public GameObject playerStonePrefab;      // white Stone Curling prefab (AI reuses enemyStonePrefab)
+    // Each stone prefab is authored with exactly one StoneLauncher + one IShotProvider, and the
+    // launcher's shotProviderSource wired to that provider. Physics/provider tuning lives on the
+    // prefab, so swapping in a real AI is just a different prefab - no manager code changes.
+    public GameObject playerStonePrefab;      // carries StoneLauncher + PlayerShotProvider
+    public GameObject aiStonePrefab;          // carries StoneLauncher + an IShotProvider (FakeAIShotProvider today)
     [FormerlySerializedAs("matchAimArrow")]
     public GameObject aimArrowPrefab;         // aim-preview PREFAB; instantiated per player stone
     public CurlingUIManager soloCurlingUI;    // the single UI; driven with banner + active shot
-
-    [Header("Spawned stone physics (fallback if no scene 'stone' template)")]
-    public float stoneCurlDegreesPerMeter = 0.5f;
-    public float stonePreShotSpinSpeed    = 2f;
-    public float stoneSlideDrag           = 0.001f;
-    public float stoneStopThreshold       = 0.05f;
 
     [Header("Match Mode (temp showcase)")]
     public int stonesPerSide = 3;
@@ -36,17 +34,6 @@ public class SoloCurlingGameManager : MonoBehaviour
     [Header("Match - recovery")]
     public Key forceNextTurnKey = Key.N;      // force the current turn to end / pass to the other player
     public float killY = -2f;                 // a stone below this Y has fallen off the sheet -> out of play
-
-    [Header("Match - AI tuning")]
-    public float aiThinkDelay  = 1f;
-    public float aiBasePower   = 17f;
-    public float aiPowerJitter = 0f;
-    public float aiBaseCurl    = 0f;
-    public float aiCurlJitter  = 0f;
-
-    [Header("Match - player tuning")]
-    public float playerMinPower = 5f;
-    public float playerMaxPower = 30f;
 
     [Header("Enemy Stones")]
     public GameObject enemyStonePrefab;
@@ -76,8 +63,8 @@ public class SoloCurlingGameManager : MonoBehaviour
 
     private void Start()
     {
-        // Both modes spawn their stones from prefabs; the pre-placed scene stone is now only a
-        // tuning template (see BuildStone) and is never launched. Disable it so it can't interfere.
+        // Both modes spawn their stones from prefabs (tuning lives on the prefab). The pre-placed
+        // scene stone is unused and never launched; disable it so it can't interfere.
         if (stone != null) stone.gameObject.SetActive(false);
         // Drive the shared UI even if it wasn't wired in the inspector.
         if (soloCurlingUI == null) soloCurlingUI = FindFirstObjectByType<CurlingUIManager>();
@@ -97,11 +84,11 @@ public class SoloCurlingGameManager : MonoBehaviour
     private void SpawnTestPlayerStone()
     {
         StoneLauncher launcher;
-        PlayerShotProvider player;
-        BuildStone(false, out launcher, out player);
+        IShotProvider provider;
+        BuildStone(false, out launcher, out provider);
         playerLauncher = launcher;
         if (soloCurlingUI != null)
-            soloCurlingUI.SetActiveShot(launcher, player);
+            soloCurlingUI.SetActiveShot(launcher, provider);
     }
 
     private void Update()
@@ -189,6 +176,9 @@ public class SoloCurlingGameManager : MonoBehaviour
         {
             NeutralizeStone(s);
             lostStones.Add(s);
+            Stone id = s.GetComponent<Stone>();
+            if (id != null) id.SetPhase(StonePhase.Lost);
+            MatchEvents.RaiseStoneLost(id);
         }
     }
 
@@ -333,6 +323,7 @@ public class SoloCurlingGameManager : MonoBehaviour
 
             string result = ComputeMatchResult();
             Debug.Log("Match end. " + result);
+            MatchEvents.RaiseEndScored(result);
             if (soloCurlingUI != null)
             {
                 soloCurlingUI.SetActiveShot(null, null);
@@ -347,15 +338,27 @@ public class SoloCurlingGameManager : MonoBehaviour
     private IEnumerator RunTurn(bool isAI)
     {
         StoneLauncher launcher;
-        PlayerShotProvider player;
-        GameObject go = BuildStone(isAI, out launcher, out player);
+        IShotProvider provider;
+        GameObject go = BuildStone(isAI, out launcher, out provider);
         currentStone = go;
         forceEndTurn = false;
+
+        if (launcher == null)
+        {
+            // Misconfigured prefab (BuildStone already logged the error); skip this turn instead
+            // of NRE-ing on launcher below.
+            DestroyStoneAndArrow(go);
+            currentStone = null;
+            yield break;
+        }
+
+        Stone stoneId = go.GetComponent<Stone>();
+        MatchEvents.RaiseTurnStarted(stoneId);
 
         if (soloCurlingUI != null)
         {
             // Player turns show the live aim HUD; AI turns show a banner only.
-            soloCurlingUI.SetActiveShot(launcher, isAI ? null : player);
+            soloCurlingUI.SetActiveShot(launcher, isAI ? null : provider);
             soloCurlingUI.SetBanner(isAI
                 ? $"AI is throwing... ({CountThrown(true)}/{stonesPerSide})"
                 : $"Your throw ({CountThrown(false)}/{stonesPerSide}) - arrows aim/power, Q/E curl, Space to shoot");
@@ -363,6 +366,9 @@ public class SoloCurlingGameManager : MonoBehaviour
 
         // Wait for the shot to be released (or a forced skip)...
         yield return new WaitUntil(() => launcher.HasBeenShot || forceEndTurn);
+
+        if (launcher.HasBeenShot)
+            MatchEvents.RaiseStoneReleased(stoneId);
 
         // ...then for it (and any stones it bumped) to come to rest, unless the turn is
         // forced or the safety timeout fires.
@@ -388,76 +394,55 @@ public class SoloCurlingGameManager : MonoBehaviour
         if (forceEndTurn)
             NeutralizeStone(go); // stop a runaway/stuck stone where it is
 
+        MatchEvents.RaiseStoneStopped(stoneId);
         if (isAI) aiStones.Add(go); else playerStones.Add(go);
         forceEndTurn = false;
     }
 
-    // Instantiate a stone from the right prefab and attach exactly one StoneLauncher plus the
-    // appropriate provider. For a human, also instantiate an aim-arrow instance from the prefab
-    // (a prefab asset can't be shown/moved directly - it must be spawned into the scene). Used by
-    // BOTH modes; the caller decides UI banners. Returns the now-active stone.
-    private GameObject BuildStone(bool isAI, out StoneLauncher launcher, out PlayerShotProvider player)
+    // Instantiate a stone from the right prefab. Each prefab is authored with exactly one
+    // StoneLauncher + one IShotProvider (the launcher's shotProviderSource wired to that provider),
+    // so there is nothing to add or strip here. We only hand the provider the scene references a
+    // prefab can't bake in - what to aim at, and a per-stone aim-arrow instance - through
+    // IShotContextReceiver, so this manager never names a concrete provider type. Used by BOTH
+    // modes; the caller decides UI banners. Returns the now-active stone.
+    private GameObject BuildStone(bool isAI, out StoneLauncher launcher, out IShotProvider provider)
     {
-        GameObject prefab = isAI ? enemyStonePrefab : playerStonePrefab;
+        GameObject prefab = isAI ? aiStonePrefab : playerStonePrefab;
         GameObject go = Instantiate(prefab, stoneStartPoint.position, stoneStartPoint.rotation);
 
         // Wire everything BEFORE the object goes live, so StoneLauncher.OnEnable
         // subscribes to a provider that is already assigned.
         go.SetActive(false);
 
-        // Guard against a prefab that already carries shot scripts (e.g. if the scene stone
-        // instance was assigned instead of the clean prefab) - otherwise the clone would keep its
-        // own StoneLauncher/provider AND get the fresh pair below -> two impulses / double strength.
-        StripShotComponents(go);
-
-        launcher = go.AddComponent<StoneLauncher>();
-        // Tuning: prefer the scene 'stone' template if present, else the serialized fallbacks.
-        launcher.curlDegreesPerMeter = stone != null ? stone.curlDegreesPerMeter : stoneCurlDegreesPerMeter;
-        launcher.preShotSpinSpeed    = stone != null ? stone.preShotSpinSpeed    : stonePreShotSpinSpeed;
-        launcher.slideDrag           = stone != null ? stone.slideDrag           : stoneSlideDrag;
-        launcher.stopThreshold       = stone != null ? stone.stopThreshold       : stoneStopThreshold;
-
-        player = null;
-        if (isAI)
+        launcher = go.GetComponentInChildren<StoneLauncher>(true);
+        provider = launcher != null ? launcher.shotProviderSource as IShotProvider : null;
+        if (launcher == null || provider == null)
         {
-            FakeAIShotProvider ai = go.AddComponent<FakeAIShotProvider>();
-            ai.basePower         = aiBasePower;
-            ai.powerJitter       = aiPowerJitter;
-            ai.baseCurl          = aiBaseCurl;
-            ai.curlJitter        = aiCurlJitter;
-            ai.thinkDelaySeconds = aiThinkDelay;
-            ai.target            = houseCenter;
-            launcher.shotProviderSource = ai;
+            Debug.LogError(
+                $"{name}: '{(prefab != null ? prefab.name : "stone prefab")}' must carry a StoneLauncher " +
+                "whose shotProviderSource implements IShotProvider. Check the prefab wiring.", this);
+            go.SetActive(true);
+            return go;
         }
-        else
-        {
-            player = go.AddComponent<PlayerShotProvider>();
-            player.minPower = playerMinPower;
-            player.maxPower = playerMaxPower;
 
-            // Spawn a private aim-arrow instance for this stone. NOT parented to the stone: the
-            // stone prefab is scaled to 0.06, so a child would inherit that scale (invisibly tiny)
-            // and its pre-shot spin. It lives at world scale and is positioned each frame by the
-            // provider; DestroyStoneAndArrow() cleans it up with the stone.
-            if (aimArrowPrefab != null)
-                player.aimArrow = Instantiate(aimArrowPrefab, go.transform.position, aimArrowPrefab.transform.rotation);
-            launcher.shotProviderSource = player;
-        }
+        // Spawn a private aim-arrow instance for a human stone. NOT parented to the stone: the stone
+        // prefab is scaled to 0.06, so a child would inherit that scale (invisibly tiny) and its
+        // pre-shot spin. It lives at world scale, is positioned each frame by the provider, and
+        // DestroyStoneAndArrow() cleans it up with the stone.
+        GameObject aimArrowInstance = null;
+        if (!isAI && aimArrowPrefab != null)
+            aimArrowInstance = Instantiate(aimArrowPrefab, go.transform.position, aimArrowPrefab.transform.rotation);
+
+        // Inject the per-turn scene context (house center to aim at, this stone's aim arrow)
+        // without naming a concrete provider type. Providers that don't need it ignore it.
+        (provider as IShotContextReceiver)?.Configure(new ShotContext(houseCenter, aimArrowInstance));
+
+        // Stamp identity so abilities / events / scoring can tell stones apart.
+        Stone id = go.GetComponent<Stone>();
+        if (id != null) id.Side = isAI ? StoneSide.AI : StoneSide.Player;
 
         go.SetActive(true); // now Awake/OnEnable run with everything wired
         return go;
-    }
-
-    // Remove any shot scripts already on a freshly instantiated stone so exactly one
-    // StoneLauncher + one provider drive it. DestroyImmediate (not Destroy) because the
-    // stone is re-activated in the same call and deferred destruction would let the stale
-    // components' OnEnable run and subscribe. The stone is inactive here, so no OnEnable has
-    // fired yet on these.
-    private static void StripShotComponents(GameObject go)
-    {
-        foreach (var c in go.GetComponentsInChildren<StoneLauncher>(true))       DestroyImmediate(c);
-        foreach (var c in go.GetComponentsInChildren<PlayerShotProvider>(true))  DestroyImmediate(c);
-        foreach (var c in go.GetComponentsInChildren<FakeAIShotProvider>(true))  DestroyImmediate(c);
     }
 
     private int CountThrown(bool isAI) => (isAI ? aiStones.Count : playerStones.Count) + 1;

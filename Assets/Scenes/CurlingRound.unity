@@ -1036,26 +1036,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SoloCurlingGameManager
   mode: 1
-  stone: {fileID: 0}
+  stone: {fileID: 4931518080376719019, guid: c7c6ce6f3da1b884297195c1225ba704, type: 3}
   houseCenter: {fileID: 637207734}
   stoneStartPoint: {fileID: 912073182}
   playerStonePrefab: {fileID: 5192512233105137483, guid: c7c6ce6f3da1b884297195c1225ba704, type: 3}
+  aiStonePrefab: {fileID: 2236453764051679029, guid: 422de04d21cb39a4ebbb7fd761ce3162, type: 3}
   aimArrowPrefab: {fileID: 7647944660234170661, guid: aca8aa66265b70048ae61cf26fee768d, type: 3}
   soloCurlingUI: {fileID: 2026273924}
-  stoneCurlDegreesPerMeter: 0.5
-  stonePreShotSpinSpeed: 2
-  stoneSlideDrag: 0.001
-  stoneStopThreshold: 0.05
   stonesPerSide: 3
   forceNextTurnKey: 28
   killY: -2
-  aiThinkDelay: 1
-  aiBasePower: 17
-  aiPowerJitter: 0
-  aiBaseCurl: 0
-  aiCurlJitter: 0
-  playerMinPower: 5
-  playerMaxPower: 30
   enemyStonePrefab: {fileID: 2236453764051679029, guid: 36e1e077170708b41963330faa0e5a70, type: 3}
   enemyStoneCount: 3
   enemyMinRadius: 0.3

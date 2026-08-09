@@ -12,7 +12,7 @@ using UnityEngine;
 /// This is NOT the real AI (see <c>AIStoneController</c>, left untouched). Everything under
 /// this <c>AIShotProviderTemp</c> folder is meant to be deleted/replaced.
 /// </summary>
-public class FakeAIShotProvider : MonoBehaviour, IShotProvider
+public class FakeAIShotProvider : MonoBehaviour, IShotProvider, IShotContextReceiver
 {
     [Header("Shot tuning")]
     [Tooltip("Launch impulse magnitude the AI aims for.")]
@@ -41,6 +41,20 @@ public class FakeAIShotProvider : MonoBehaviour, IShotProvider
 
     /// <inheritdoc/>
     public ShotData CurrentShot => intendedShot;
+
+    /// <inheritdoc/>
+    // The most curl this fake AI could apply on any given throw. Kept positive and non-zero
+    // so a HUD gauge scaling by it never divides by zero (AI turns suppress the HUD anyway).
+    public float MaxCurl => Mathf.Max(Mathf.Abs(baseCurl) + Mathf.Abs(curlJitter), 0.01f);
+
+    /// <inheritdoc/>
+    // The manager injects the house center to aim at, so the target need not be baked into the
+    // prefab (a scene reference can't be). Ignores a null so a prefab-set target is preserved.
+    public void Configure(ShotContext context)
+    {
+        if (context.HouseCenter != null)
+            target = context.HouseCenter;
+    }
 
     private void OnEnable()
     {
