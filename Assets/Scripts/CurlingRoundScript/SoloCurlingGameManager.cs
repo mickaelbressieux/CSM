@@ -14,7 +14,6 @@ public class SoloCurlingGameManager : MonoBehaviour
     public GameMode mode = GameMode.TestDrop;
 
     [Header("References")]
-    public StoneLauncher stone;
     public Transform houseCenter;
     public Transform stoneStartPoint;
 
@@ -63,9 +62,7 @@ public class SoloCurlingGameManager : MonoBehaviour
 
     private void Start()
     {
-        // Both modes spawn their stones from prefabs (tuning lives on the prefab). The pre-placed
-        // scene stone is unused and never launched; disable it so it can't interfere.
-        if (stone != null) stone.gameObject.SetActive(false);
+        // Both modes spawn their stones from prefabs (tuning lives on the prefab).
         // Drive the shared UI even if it wasn't wired in the inspector.
         if (soloCurlingUI == null) soloCurlingUI = FindFirstObjectByType<CurlingUIManager>();
         stoneGroundY = stoneStartPoint != null ? stoneStartPoint.position.y : 0f;

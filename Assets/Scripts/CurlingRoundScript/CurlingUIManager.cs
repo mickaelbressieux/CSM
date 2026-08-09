@@ -7,28 +7,24 @@ using TMPro;
 /// label, so the HUD looks the same everywhere.
 ///
 /// Two inputs drive it:
-/// - the <b>active shot</b> (<see cref="stone"/> + <see cref="provider"/>) — the live aim / power /
-///   curl HUD is derived from these. Test mode wires them once in the inspector; match mode
-///   reassigns them each turn via <see cref="SetActiveShot"/>.
+/// - the <b>active shot</b> — the live aim / power / curl HUD is derived from it. Both modes
+///   hand it over via <see cref="SetActiveShot"/> each time a stone is spawned.
 /// - an optional <b>banner</b> line (<see cref="SetBanner"/>) used for match turn prompts, the
 ///   "AI is throwing" state, and the end-of-round result.
 /// </summary>
 public class CurlingUIManager : MonoBehaviour
 {
     public StoneLauncher stone;                // active shot state (HasBeenShot / ShotFinished)
-    public PlayerShotProvider provider;        // test-mode inspector wiring; match mode overrides via SetActiveShot
     public SoloCurlingGameManager gameManager;
     public TMP_Text infoText;
 
     // Optional override / prefix line. Empty means "no banner".
     private string banner = "";
 
-    // The provider actually driving the HUD. Defaults to the inspector-wired `provider` (test
-    // mode); match mode reassigns it each turn through SetActiveShot, typed to the interface so
-    // any IShotProvider (player or AI) works without the HUD naming a concrete type.
+    // The provider actually driving the HUD. Supplied by the game manager through SetActiveShot
+    // each time a stone is spawned, and typed to the interface so any IShotProvider (player or
+    // AI) works without the HUD naming a concrete type. Null until the first stone exists.
     private IShotProvider activeProvider;
-
-    private void Awake() => activeProvider = provider;
 
     /// <summary>Point the HUD at the shot currently in play. Pass a null provider when it is not a
     /// human's turn (e.g. the AI is throwing), so the aiming HUD is suppressed.</summary>

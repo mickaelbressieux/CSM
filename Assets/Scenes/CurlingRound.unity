@@ -1035,8 +1035,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1492ee1e1a7bb664ca42f37c9f9dfdf4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SoloCurlingGameManager
-  mode: 1
-  stone: {fileID: 4931518080376719019, guid: c7c6ce6f3da1b884297195c1225ba704, type: 3}
+  mode: 0
   houseCenter: {fileID: 637207734}
   stoneStartPoint: {fileID: 912073182}
   playerStonePrefab: {fileID: 5192512233105137483, guid: c7c6ce6f3da1b884297195c1225ba704, type: 3}
@@ -1229,7 +1228,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SoloCurlingUI
   stone: {fileID: 0}
-  provider: {fileID: 0}
   gameManager: {fileID: 1556265698}
   infoText: {fileID: 39661338}
 --- !u!1 &2060920602
