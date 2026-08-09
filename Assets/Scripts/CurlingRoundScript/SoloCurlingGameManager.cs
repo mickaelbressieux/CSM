@@ -1,13 +1,38 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 
 public class SoloCurlingGameManager : MonoBehaviour
 {
+    // TestDrop = the original showcase (drop N enemy stones, player shoots one).
+    // Match    = temp turn-based round: AI and player alternate, AI first, 3 stones each.
+    public enum GameMode { TestDrop, Match }
+
+    [Header("Game Mode")]
+    public GameMode mode = GameMode.TestDrop;
+
     [Header("References")]
-    public CurlingStoneController stone;
     public Transform houseCenter;
     public Transform stoneStartPoint;
+
+    [Header("Stones (both modes spawn from prefabs)")]
+    // Each stone prefab is authored with exactly one StoneLauncher + one IShotProvider, and the
+    // launcher's shotProviderSource wired to that provider. Physics/provider tuning lives on the
+    // prefab, so swapping in a real AI is just a different prefab - no manager code changes.
+    public GameObject playerStonePrefab;      // carries StoneLauncher + PlayerShotProvider
+    public GameObject aiStonePrefab;          // carries StoneLauncher + an IShotProvider (FakeAIShotProvider today)
+    [FormerlySerializedAs("matchAimArrow")]
+    public GameObject aimArrowPrefab;         // aim-preview PREFAB; instantiated per player stone
+    public CurlingUIManager soloCurlingUI;    // the single UI; driven with banner + active shot
+
+    [Header("Match Mode (temp showcase)")]
+    public int stonesPerSide = 3;
+
+    [Header("Match - recovery")]
+    public Key forceNextTurnKey = Key.N;      // force the current turn to end / pass to the other player
+    public float killY = -2f;                 // a stone below this Y has fallen off the sheet -> out of play
 
     [Header("Enemy Stones")]
     public GameObject enemyStonePrefab;
@@ -21,6 +46,14 @@ public class SoloCurlingGameManager : MonoBehaviour
     public string enemyTag = "opponent";
 
     private List<GameObject> enemyStones = new List<GameObject>();
+    // Match-mode stones, tracked by side so scoring never relies on tags.
+    private List<GameObject> playerStones = new List<GameObject>();
+    private List<GameObject> aiStones     = new List<GameObject>();
+    // Stones that fell off the sheet (below killY): frozen and excluded from scoring.
+    private HashSet<GameObject> lostStones = new HashSet<GameObject>();
+    private GameObject currentStone;      // the stone in play this turn (not yet in a side list)
+    private bool forceEndTurn;            // set when the user forces the current turn to end
+    private StoneLauncher playerLauncher; // the spawned player stone (test mode: HUD + scoring)
     private float stoneGroundY;
     private bool warnedMissingEnemyTag;
 
@@ -29,19 +62,47 @@ public class SoloCurlingGameManager : MonoBehaviour
 
     private void Start()
     {
-        if (stoneStartPoint != null)
-            stone.transform.position = stoneStartPoint.position;
+        // Both modes spawn their stones from prefabs (tuning lives on the prefab).
+        // Drive the shared UI even if it wasn't wired in the inspector.
+        if (soloCurlingUI == null) soloCurlingUI = FindFirstObjectByType<CurlingUIManager>();
+        stoneGroundY = stoneStartPoint != null ? stoneStartPoint.position.y : 0f;
 
-        stoneGroundY = stone.transform.position.y;
+        if (mode == GameMode.Match)
+        {
+            StartCoroutine(RunMatch());
+            return;
+        }
+
+        // Test-drop: spawn the player stone from the prefab, then drop the enemies.
+        SpawnTestPlayerStone();
         SpawnEnemyStones();
+    }
+
+    private void SpawnTestPlayerStone()
+    {
+        StoneLauncher launcher;
+        IShotProvider provider;
+        BuildStone(false, out launcher, out provider);
+        playerLauncher = launcher;
+        if (soloCurlingUI != null)
+            soloCurlingUI.SetActiveShot(launcher, provider);
     }
 
     private void Update()
     {
-        if (stone == null || houseCenter == null)
+        // Match mode drives its own turns / reset inside RunMatch(); here we only watch
+        // for the force-next-turn key so a stuck stone can be skipped.
+        if (mode == GameMode.Match)
+        {
+            if (Keyboard.current != null && Keyboard.current[forceNextTurnKey].wasPressedThisFrame)
+                forceEndTurn = true;
+            return;
+        }
+
+        if (playerLauncher == null || houseCenter == null)
             return;
 
-        if (stone.ShotFinished && !resultProcessed && AllEnemiesStopped())
+        if (playerLauncher.ShotFinished && !resultProcessed && AllEnemiesStopped())
         {
             lastScore = ComputeScore();
             resultProcessed = true;
@@ -65,9 +126,9 @@ public class SoloCurlingGameManager : MonoBehaviour
             if (erb != null) { erb.linearVelocity = Vector3.zero; erb.angularVelocity = Vector3.zero; }
         }
 
-        stone.ResetStone();
-        if (stoneStartPoint != null)
-            stone.transform.position = stoneStartPoint.position;
+        // Fresh player stone (its aim arrow is destroyed with it).
+        if (playerLauncher != null) DestroyStoneAndArrow(playerLauncher.gameObject);
+        SpawnTestPlayerStone();
         resultProcessed = false;
         lastScore = 0;
         SpawnEnemyStones();
@@ -87,8 +148,53 @@ public class SoloCurlingGameManager : MonoBehaviour
 
     private void FixedUpdate()
     {
-        // Snap slow-moving enemy stones to a full stop so they don't creep indefinitely
-        foreach (var s in enemyStones)
+        // Snap slow-moving stones to a full stop so they don't creep indefinitely.
+        if (mode == GameMode.Match)
+        {
+            // A stone that fell off the sheet never slows down on its own, which would
+            // otherwise wedge the round; freeze any that dropped below killY.
+            KillIfFallen(currentStone);
+            foreach (var s in playerStones) KillIfFallen(s);
+            foreach (var s in aiStones)     KillIfFallen(s);
+
+            SnapSlowStones(playerStones);
+            SnapSlowStones(aiStones);
+            return;
+        }
+
+        SnapSlowStones(enemyStones);
+    }
+
+    // Freeze a stone that has dropped off the sheet and mark it out of play.
+    private void KillIfFallen(GameObject s)
+    {
+        if (s == null || lostStones.Contains(s)) return;
+        if (s.transform.position.y < killY)
+        {
+            NeutralizeStone(s);
+            lostStones.Add(s);
+            Stone id = s.GetComponent<Stone>();
+            if (id != null) id.SetPhase(StonePhase.Lost);
+            MatchEvents.RaiseStoneLost(id);
+        }
+    }
+
+    // Stop a stone dead where it is (used by kill-plane recovery and manual force-skip).
+    private void NeutralizeStone(GameObject s)
+    {
+        if (s == null) return;
+        Rigidbody rb = s.GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.linearVelocity  = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.constraints     = RigidbodyConstraints.FreezeAll;
+        }
+    }
+
+    private void SnapSlowStones(List<GameObject> stones)
+    {
+        foreach (var s in stones)
         {
             if (s == null) continue;
             Rigidbody rb = s.GetComponent<Rigidbody>();
@@ -157,7 +263,7 @@ public class SoloCurlingGameManager : MonoBehaviour
         Vector3 center = houseCenter.position;
         center.y = 0f;
 
-        Vector3 playerPos = stone.transform.position;
+        Vector3 playerPos = playerLauncher.transform.position;
         playerPos.y = 0f;
         float playerDist = Vector3.Distance(playerPos, center);
 
@@ -181,16 +287,247 @@ public class SoloCurlingGameManager : MonoBehaviour
 
     public float GetDistanceToCenter()
     {
-        if (stone == null || houseCenter == null)
+        if (playerLauncher == null || houseCenter == null)
             return -1f;
 
-        Vector3 stonePos  = stone.transform.position;
+        Vector3 stonePos  = playerLauncher.transform.position;
         Vector3 targetPos = houseCenter.position;
 
         stonePos.y  = 0f;
         targetPos.y = 0f;
 
         return Vector3.Distance(stonePos, targetPos);
+    }
+
+    // ------------------------------------------------------------------
+    // Temp match mode: AI and player alternate throws (AI first), 3 each.
+    // Every stone is spawned at runtime and driven through the SAME
+    // StoneLauncher via the IShotProvider seam — that is what this showcases.
+    // ------------------------------------------------------------------
+
+    private IEnumerator RunMatch()
+    {
+        while (true)
+        {
+            ClearMatchStones();
+
+            int totalThrows = stonesPerSide * 2;
+            for (int i = 0; i < totalThrows; i++)
+            {
+                bool isAI = (i % 2 == 0); // even turns are the AI's, so the AI starts
+                yield return StartCoroutine(RunTurn(isAI));
+            }
+
+            string result = ComputeMatchResult();
+            Debug.Log("Match end. " + result);
+            MatchEvents.RaiseEndScored(result);
+            if (soloCurlingUI != null)
+            {
+                soloCurlingUI.SetActiveShot(null, null);
+                soloCurlingUI.SetBanner(result + "\nPress R to play again.");
+            }
+
+            yield return new WaitUntil(() =>
+                Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame);
+        }
+    }
+
+    private IEnumerator RunTurn(bool isAI)
+    {
+        StoneLauncher launcher;
+        IShotProvider provider;
+        GameObject go = BuildStone(isAI, out launcher, out provider);
+        currentStone = go;
+        forceEndTurn = false;
+
+        if (launcher == null)
+        {
+            // Misconfigured prefab (BuildStone already logged the error); skip this turn instead
+            // of NRE-ing on launcher below.
+            DestroyStoneAndArrow(go);
+            currentStone = null;
+            yield break;
+        }
+
+        Stone stoneId = go.GetComponent<Stone>();
+        MatchEvents.RaiseTurnStarted(stoneId);
+
+        if (soloCurlingUI != null)
+        {
+            // Player turns show the live aim HUD; AI turns show a banner only.
+            soloCurlingUI.SetActiveShot(launcher, isAI ? null : provider);
+            soloCurlingUI.SetBanner(isAI
+                ? $"AI is throwing... ({CountThrown(true)}/{stonesPerSide})"
+                : $"Your throw ({CountThrown(false)}/{stonesPerSide}) - arrows aim/power, Q/E curl, Space to shoot");
+        }
+
+        // Wait for the shot to be released (or a forced skip)...
+        yield return new WaitUntil(() => launcher.HasBeenShot || forceEndTurn);
+
+        if (launcher.HasBeenShot)
+            MatchEvents.RaiseStoneReleased(stoneId);
+
+        // ...then for it (and any stones it bumped) to come to rest, unless the turn is
+        // forced or the safety timeout fires.
+        if (!forceEndTurn)
+        {
+            float elapsed = 0f;
+            yield return new WaitUntil(() =>
+                (launcher.ShotFinished && AllMatchStonesSettled()) ||
+                forceEndTurn ||
+                (elapsed += Time.deltaTime) > 20f);
+        }
+
+        currentStone = null;
+
+        if (!launcher.HasBeenShot)
+        {
+            // Skipped before the stone was ever thrown - discard it.
+            DestroyStoneAndArrow(go);
+            forceEndTurn = false;
+            yield break;
+        }
+
+        if (forceEndTurn)
+            NeutralizeStone(go); // stop a runaway/stuck stone where it is
+
+        MatchEvents.RaiseStoneStopped(stoneId);
+        if (isAI) aiStones.Add(go); else playerStones.Add(go);
+        forceEndTurn = false;
+    }
+
+    // Instantiate a stone from the right prefab. Each prefab is authored with exactly one
+    // StoneLauncher + one IShotProvider (the launcher's shotProviderSource wired to that provider),
+    // so there is nothing to add or strip here. We only hand the provider the scene references a
+    // prefab can't bake in - what to aim at, and a per-stone aim-arrow instance - through
+    // IShotContextReceiver, so this manager never names a concrete provider type. Used by BOTH
+    // modes; the caller decides UI banners. Returns the now-active stone.
+    private GameObject BuildStone(bool isAI, out StoneLauncher launcher, out IShotProvider provider)
+    {
+        GameObject prefab = isAI ? aiStonePrefab : playerStonePrefab;
+        GameObject go = Instantiate(prefab, stoneStartPoint.position, stoneStartPoint.rotation);
+
+        // Wire everything BEFORE the object goes live, so StoneLauncher.OnEnable
+        // subscribes to a provider that is already assigned.
+        go.SetActive(false);
+
+        launcher = go.GetComponentInChildren<StoneLauncher>(true);
+        provider = launcher != null ? launcher.shotProviderSource as IShotProvider : null;
+        if (launcher == null || provider == null)
+        {
+            Debug.LogError(
+                $"{name}: '{(prefab != null ? prefab.name : "stone prefab")}' must carry a StoneLauncher " +
+                "whose shotProviderSource implements IShotProvider. Check the prefab wiring.", this);
+            go.SetActive(true);
+            return go;
+        }
+
+        // Spawn a private aim-arrow instance for a human stone. NOT parented to the stone: the stone
+        // prefab is scaled to 0.06, so a child would inherit that scale (invisibly tiny) and its
+        // pre-shot spin. It lives at world scale, is positioned each frame by the provider, and
+        // DestroyStoneAndArrow() cleans it up with the stone.
+        GameObject aimArrowInstance = null;
+        if (!isAI && aimArrowPrefab != null)
+            aimArrowInstance = Instantiate(aimArrowPrefab, go.transform.position, aimArrowPrefab.transform.rotation);
+
+        // Inject the per-turn scene context (house center to aim at, this stone's aim arrow)
+        // without naming a concrete provider type. Providers that don't need it ignore it.
+        (provider as IShotContextReceiver)?.Configure(new ShotContext(houseCenter, aimArrowInstance));
+
+        // Stamp identity so abilities / events / scoring can tell stones apart.
+        Stone id = go.GetComponent<Stone>();
+        if (id != null) id.Side = isAI ? StoneSide.AI : StoneSide.Player;
+
+        go.SetActive(true); // now Awake/OnEnable run with everything wired
+        return go;
+    }
+
+    private int CountThrown(bool isAI) => (isAI ? aiStones.Count : playerStones.Count) + 1;
+
+    private bool AllMatchStonesSettled()
+    {
+        return StonesSettled(playerStones) && StonesSettled(aiStones);
+    }
+
+    private bool StonesSettled(List<GameObject> stones)
+    {
+        foreach (var s in stones)
+        {
+            if (s == null) continue;
+            Rigidbody rb = s.GetComponent<Rigidbody>();
+            if (rb != null && rb.linearVelocity.magnitude > 0.01f)
+                return false;
+        }
+        return true;
+    }
+
+    private void ClearMatchStones()
+    {
+        foreach (var s in playerStones) DestroyStoneAndArrow(s);
+        foreach (var s in aiStones)     DestroyStoneAndArrow(s);
+        DestroyStoneAndArrow(currentStone);
+        playerStones.Clear();
+        aiStones.Clear();
+        lostStones.Clear();
+        currentStone = null;
+        forceEndTurn = false;
+    }
+
+    // Destroy a stone and the aim-arrow instance it owns (if any). Safe on null / AI stones.
+    private void DestroyStoneAndArrow(GameObject go)
+    {
+        if (go == null) return;
+        PlayerShotProvider p = go.GetComponent<PlayerShotProvider>();
+        if (p != null && p.aimArrow != null) Destroy(p.aimArrow);
+        Destroy(go);
+    }
+
+    // Standard curling end scoring: the side with the nearest stone scores one point
+    // for every one of its stones closer to the button than the opponent's nearest.
+    private string ComputeMatchResult()
+    {
+        Vector3 center = houseCenter.position;
+        center.y = 0f;
+
+        float playerNearest = NearestDistance(playerStones, center);
+        float aiNearest      = NearestDistance(aiStones, center);
+
+        if (playerNearest == float.MaxValue && aiNearest == float.MaxValue)
+            return "No stones in play - draw.";
+
+        bool playerWon = playerNearest <= aiNearest;
+        float opponentNearest = playerWon ? aiNearest : playerNearest;
+        List<GameObject> winners = playerWon ? playerStones : aiStones;
+
+        int points = 0;
+        foreach (var s in winners)
+        {
+            if (s == null || lostStones.Contains(s)) continue;
+            Vector3 p = s.transform.position;
+            p.y = 0f;
+            if (Vector3.Distance(p, center) < opponentNearest)
+                points++;
+        }
+
+        string who = playerWon ? "You" : "AI";
+        return $"{who} score {points}  (you: {Readable(playerNearest)}, AI: {Readable(aiNearest)})";
+    }
+
+    private static string Readable(float dist) =>
+        dist == float.MaxValue ? "-" : dist.ToString("F2");
+
+    private float NearestDistance(List<GameObject> stones, Vector3 center)
+    {
+        float best = float.MaxValue;
+        foreach (var s in stones)
+        {
+            if (s == null || lostStones.Contains(s)) continue;
+            Vector3 p = s.transform.position;
+            p.y = 0f;
+            float d = Vector3.Distance(p, center);
+            if (d < best) best = d;
+        }
+        return best;
     }
 
     private void AssignEnemyTag(GameObject target)
