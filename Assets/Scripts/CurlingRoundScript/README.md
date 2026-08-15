@@ -27,6 +27,7 @@ A throw is split along one clean seam:
 event Action<ShotData> ShotReady;   // raised exactly ONCE when the shot is committed
 ShotData CurrentShot { get; }       // the live, in-progress shot — for HUD preview
 float MaxCurl { get; }              // max curl magnitude, so the HUD can scale its gauge
+float MaxLateral { get; }           // max lateral-offset magnitude, likewise
 void Rearm();                       // re-arm to accept a fresh shot on reset
 ```
 
@@ -59,6 +60,11 @@ An immutable `readonly struct` — the only thing that ever crosses the launch s
   `target − position`).
 - `Power` — launch impulse magnitude.
 - `Curl` — signed: **negative = curl left, positive = curl right** relative to travel.
+- `LateralOffset` — signed sideways shift of the *launch position*, in world meters along the
+  sheet's right axis (same sign convention: **negative = left, positive = right**). `Direction`
+  is deliberately unaffected, so an offset **parallel-translates** the trajectory instead of
+  rotating it — the real-curling "move on the hack", and a different tool from the aim angle.
+  Defaulted in the constructor, so three-argument callers still compile.
 
 ---
 
@@ -67,7 +73,7 @@ An immutable `readonly struct` — the only thing that ever crosses the launch s
 ```mermaid
 flowchart TD
     subgraph Providers["IShotProvider (who decides)"]
-        P[PlayerShotProvider<br/>keyboard aim/power/curl<br/>Space commits]
+        P[PlayerShotProvider<br/>keyboard aim/power/curl/offset<br/>Space commits]
         A[FakeAIShotProvider<br/>thinks, then aims at target]
     end
 
@@ -76,7 +82,7 @@ flowchart TD
 
     subgraph Launcher["StoneLauncher (physics)"]
         L[OnShotReady<br/>queues pendingShot]
-        F[FixedUpdate<br/>apply impulse + spin<br/>simulate curl each step<br/>stop when speed < stopThreshold]
+        F[FixedUpdate<br/>shift launch pos by LateralOffset<br/>apply impulse + spin<br/>simulate curl each step<br/>stop when speed < stopThreshold]
         L --> F
     end
 
@@ -94,9 +100,9 @@ flowchart TD
 ```
 
 **In one sentence:** a provider raises `ShotReady(ShotData)` → `StoneLauncher.OnShotReady`
-queues it → the next `FixedUpdate` applies the impulse + pre-shot spin, then bends the
-velocity heading a little each physics step (the curl) until speed drops below
-`stopThreshold`, flipping `ShotFinished` to true.
+queues it → the next `FixedUpdate` shifts the stone sideways by `LateralOffset` and applies the
+impulse + pre-shot spin, then bends the velocity heading a little each physics step (the curl)
+until speed drops below `stopThreshold`, flipping `ShotFinished` to true.
 
 ---
 
@@ -125,13 +131,13 @@ CurlingRoundScript/
 ### The shooting seam (`Shooting/` + `AIShotProviderTemp/`)
 
 **[`ShotData`](Shooting/ShotData.cs)** — immutable `readonly struct` (Direction, Power,
-Curl). Pure data, source-agnostic; produced by any provider, consumed by the launcher and
-read by the HUD. Depends on nothing but `UnityEngine`.
+Curl, LateralOffset). Pure data, source-agnostic; produced by any provider, consumed by the
+launcher and read by the HUD. Depends on nothing but `UnityEngine`.
 
 **[`IShotProvider`](Shooting/IShotProvider.cs)** — the interface every shot source implements:
-the `ShotReady` event, the `CurrentShot` preview getter, `MaxCurl` (so the HUD can scale its
-curl gauge without knowing the concrete type), and `Rearm()`. This is the only thing
-`StoneLauncher` and `CurlingUIManager` know about a shot source.
+the `ShotReady` event, the `CurrentShot` preview getter, `MaxCurl` / `MaxLateral` (so the HUD can
+scale its curl and offset gauges without knowing the concrete type), and `Rearm()`. This is the
+only thing `StoneLauncher` and `CurlingUIManager` know about a shot source.
 
 **[`IShotContextReceiver`](Shooting/IShotContextReceiver.cs)** — an optional second interface
 plus the `ShotContext` struct. Lets the manager pass per-turn scene references (house center,
@@ -139,10 +145,12 @@ aim arrow) into a provider without naming a concrete type. Implemented by both p
 
 **[`PlayerShotProvider`](Shooting/PlayerShotProvider.cs)** — the human input half
 (`MonoBehaviour, IShotProvider, IShotContextReceiver`). Each `Update` reads the keyboard (← →
-aim, ↑ ↓ power, Q/E curl) and updates the aim-preview arrow; **Space** commits the shot via
+aim, ↑ ↓ power, Q/E curl, A/D lateral offset) and updates the aim-preview arrow; **Space** commits the shot via
 `CommitShot()`, which raises `ShotReady`. An `armed` flag flips off the instant Space is pressed
 so a shot can't fire twice until `Rearm()`. `Configure` receives the aim arrow the manager spawns
-for this stone. Knows nothing about physics.
+for this stone. Knows nothing about physics — including the lateral offset: it only *composes* the
+value, and the launcher is what actually moves the stone. (The arrow needs no extra code to follow:
+`UpdateAimArrow()` anchors it to `transform.position`, which the launcher has already shifted.)
 
 **[`FakeAIShotProvider`](AIShotProviderTemp/FakeAIShotProvider.cs)** — a **temporary,
 throwaway** demo (`MonoBehaviour, IShotProvider, IShotContextReceiver`), explicitly *not* the
@@ -150,16 +158,26 @@ real `AIStoneController` (which lives outside this folder and is untouched). `On
 the `ThinkThenShoot()` coroutine — the manager only activates the stone on the AI's turn, so
 enabling *is* the cue to start deliberating. After `thinkDelaySeconds` it aims flat at its
 `target` (injected via `Configure` as the house center), applies a configurable, optionally
-jittered power/curl, and raises `ShotReady`. Its whole point is to prove a non-human source
-drops into the same launcher and prefab pipeline with zero launcher/manager changes.
+jittered power/curl/lateral offset, and raises `ShotReady`. Its whole point is to prove a non-human
+source drops into the same launcher and prefab pipeline with zero launcher/manager changes.
+Note it aims from its **un-shifted** spawn position on purpose: re-aiming from the offset launch
+point would cancel the offset out, so aiming from the nominal spawn makes `baseLateral`
+parallel-translate the AI's path exactly as the player's A/D does.
 
 **[`StoneLauncher`](Shooting/StoneLauncher.cs)** — the physics half
 (`[RequireComponent(typeof(Rigidbody))]`). In `OnEnable` it casts `shotProviderSource` to
 `IShotProvider` (logging an error if the cast fails) and subscribes to `ShotReady`;
-`OnDisable` unsubscribes. `OnShotReady` stashes the shot and defers it to `FixedUpdate`, where
-the impulse and one-shot spin are applied and then curl is simulated until the stone stops.
-Exposes `HasBeenShot` / `ShotFinished` (polled by the manager and UI) and `ResetStone()`,
-which restores the start pose and calls `provider?.Rearm()`.
+`OnDisable` unsubscribes. `OnShotReady` stashes the shot and defers it to `FixedUpdate`, where the
+launch position is shifted by `LateralOffset`, the impulse and one-shot spin are applied, and then
+curl is simulated until the stone stops. Exposes `HasBeenShot` / `ShotFinished` (polled by the
+manager and UI) and `ResetStone()`, which restores the start pose and calls `provider?.Rearm()`.
+
+While unshot it also *previews* the live shot each `FixedUpdate` — spinning the stone by
+`CurrentShot.Curl` and sliding it sideways to `CurrentShot.LateralOffset` — so the human sees the
+throw take shape. The offset is written straight to `rb.position` (relative to the cached,
+un-shifted `startPosition`) rather than applied as a force, because the pre-shot stone is under
+`RigidbodyConstraints.FreezePosition` with its velocity zeroed every step. Keeping `startPosition`
+un-shifted is what lets `ResetStone()` and `Rearm()` clear an offset cleanly.
 
 ### Orchestration & UI
 
@@ -189,7 +207,8 @@ the pre-placed scene `stone` is disabled and never launched.
 through one `TMP_Text infoText`. It's driven by an "active shot" (a `StoneLauncher` + optional
 provider) plus an optional banner line, tracked internally as an **`IShotProvider`** so any
 provider works. `Update` picks the state from `HasBeenShot`/`ShotFinished`: live aiming HUD
-(power/curl bar/aim, read from `CurrentShot` and `MaxCurl`), "stone is sliding", a banner, or the
+(power / curl bar / offset bar / aim, read from `CurrentShot`, `MaxCurl` and `MaxLateral`, both
+gauges drawn by the shared `SignedBar` helper), "stone is sliding", a banner, or the
 test-mode result panel. `SetActiveShot(stone, provider)` reassigns it each turn — a **null
 provider suppresses the aiming HUD** (used on AI turns); the serialized `provider` field is only
 the inspector default for TestDrop and is not broken by the interface routing.

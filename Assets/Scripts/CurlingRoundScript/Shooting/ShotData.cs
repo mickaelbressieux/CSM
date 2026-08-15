@@ -26,12 +26,25 @@ public readonly struct ShotData
     /// </summary>
     public readonly float Curl;
 
-    public ShotData(Vector3 direction, float power, float curl)
+    /// <summary>
+    /// Signed sideways shift of the launch position, in world meters along the sheet's
+    /// right axis. Negative = left, positive = right — the same convention as
+    /// <see cref="Curl"/>.
+    ///
+    /// <see cref="Direction"/> is deliberately unaffected, so a non-zero offset
+    /// parallel-translates the whole trajectory instead of rotating it (the real-curling
+    /// "move on the hack"). That is what makes it a different tool from the aim angle.
+    /// </summary>
+    public readonly float LateralOffset;
+
+    // lateralOffset is defaulted so existing three-argument callers keep working.
+    public ShotData(Vector3 direction, float power, float curl, float lateralOffset = 0f)
     {
         // Normalize defensively so callers may pass any non-unit direction
         // (e.g. a raw target-minus-position vector).
         Direction = direction.sqrMagnitude > 1e-6f ? direction.normalized : Vector3.forward;
         Power = power;
         Curl = curl;
+        LateralOffset = lateralOffset;
     }
 }

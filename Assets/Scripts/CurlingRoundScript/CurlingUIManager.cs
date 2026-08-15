@@ -74,26 +74,32 @@ public class CurlingUIManager : MonoBehaviour
 
     private string AimingHud()
     {
-        ShotData shot = activeProvider.CurrentShot;
-        float power   = shot.Power;
-        float curl    = shot.Curl;
-        float maxCurl = activeProvider.MaxCurl;
-        Vector3 aim   = shot.Direction;
+        ShotData shot    = activeProvider.CurrentShot;
+        float power      = shot.Power;
+        float curl       = shot.Curl;
+        float maxCurl    = activeProvider.MaxCurl;
+        float lateral    = shot.LateralOffset;
+        float maxLateral = activeProvider.MaxLateral;
+        Vector3 aim      = shot.Direction;
 
-        string curlBar = CurlBar(curl, maxCurl);
+        string curlBar    = SignedBar(curl, maxCurl);
+        string lateralBar = SignedBar(lateral, maxLateral);
 
         return
             "Left / Right: aim\n" +
             "Up / Down: power\n" +
             "Q: curl left   E: curl right\n" +
+            "A: offset left   D: offset right\n" +
             "Space: shoot\n\n" +
-            $"Power: {power:F1}\n" +
-            $"Curl:  {curlBar} {curl:+0.0;-0.0;0.0}\n" +
+            $"Power:  {power:F1}\n" +
+            $"Curl:   {curlBar} {curl:+0.0;-0.0;0.0}\n" +
+            $"Offset: {lateralBar} {lateral:+0.0;-0.0;0.0}\n" +
             $"Aim: {aim.x:F2}, {aim.z:F2}";
     }
 
-    // Shows a centred bar: <<<..|..... (left) or .....|..>>> (right)
-    private string CurlBar(float value, float max, int halfSteps = 5)
+    // Shows a centred bar: <<<..|..... (left) or .....|..>>> (right).
+    // Generic over any signed value/max pair — used for both curl and lateral offset.
+    private string SignedBar(float value, float max, int halfSteps = 5)
     {
         int filled = Mathf.RoundToInt((Mathf.Abs(value) / max) * halfSteps);
         filled = Mathf.Clamp(filled, 0, halfSteps);
