@@ -100,6 +100,8 @@ MonoBehaviour:
   powerChangeSpeed: 10
   maxCurlPower: 1
   curlChangeSpeed: 0.6
+  maxLateralOffset: 20
+  lateralChangeSpeed: 8
   aimArrow: {fileID: 0}
   arrowYOffset: 0.05
   arrowForwardOffset: 2
@@ -116,6 +118,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Stone
   Side: 0
+  <Phase>k__BackingField: 0
 --- !u!1001 &2867404687898094518
 PrefabInstance:
   m_ObjectHideFlags: 0

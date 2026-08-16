@@ -175,9 +175,16 @@ manager and UI) and `ResetStone()`, which restores the start pose and calls `pro
 While unshot it also *previews* the live shot each `FixedUpdate` — spinning the stone by
 `CurrentShot.Curl` and sliding it sideways to `CurrentShot.LateralOffset` — so the human sees the
 throw take shape. The offset is written straight to `rb.position` (relative to the cached,
-un-shifted `startPosition`) rather than applied as a force, because the pre-shot stone is under
-`RigidbodyConstraints.FreezePosition` with its velocity zeroed every step. Keeping `startPosition`
-un-shifted is what lets `ResetStone()` and `Rearm()` clear an offset cleanly.
+un-shifted `startPosition`) rather than applied as a force. Keeping `startPosition` un-shifted is
+what lets `ResetStone()` and `Rearm()` clear an offset cleanly.
+
+> **Why `PreShotConstraints` freezes only Y.** An unshot stone used to be held by
+> `RigidbodyConstraints.FreezePosition`, but the solver treats a frozen linear axis as
+> authoritative and **reverts any `rb.position` write on it** — which silently swallowed the
+> lateral preview, making the offset appear only at release (the launch path swaps the
+> constraints out first, so its write survived). X/Z are therefore left free and pinned in code
+> instead: the pre-shot branch rewrites `rb.position` and zeroes the velocity every step, which
+> holds the stone just as firmly while still letting the preview move it.
 
 ### Orchestration & UI
 

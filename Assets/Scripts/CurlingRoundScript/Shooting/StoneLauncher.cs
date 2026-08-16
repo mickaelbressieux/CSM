@@ -51,6 +51,13 @@ public class StoneLauncher : MonoBehaviour
     // If the sheet is ever rotated in the scene, use startRotation * Vector3.right instead.
     private static Vector3 SheetRight => Vector3.right;
 
+    // How an unshot stone is held in place. Only Y is frozen — X/Z are left free ON PURPOSE so
+    // the lateral-offset preview can reposition the stone: the solver treats a frozen linear
+    // axis as authoritative and reverts any rb.position write on it, which would silently undo
+    // the preview. X/Z are instead pinned in code, by writing rb.position and zeroing the
+    // velocity every FixedUpdate while unshot (see the pre-shot branch below).
+    private const RigidbodyConstraints PreShotConstraints = RigidbodyConstraints.FreezePositionY;
+
     // The committed shot, stashed from ShotReady and applied on the next FixedUpdate so
     // the impulse is visible to the physics engine before the stop-check runs.
     private ShotData pendingShot;
@@ -68,7 +75,7 @@ public class StoneLauncher : MonoBehaviour
 
         rb.linearVelocity  = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
-        rb.constraints     = RigidbodyConstraints.FreezePosition;
+        rb.constraints     = PreShotConstraints;
     }
 
     private void OnEnable()
@@ -132,9 +139,10 @@ public class StoneLauncher : MonoBehaviour
                 rb.linearVelocity  = Vector3.zero;
                 // Spin stone for visual pre-shot feedback, driven by the live aim curl.
                 rb.angularVelocity = new Vector3(0f, preview.Curl * preShotSpinSpeed, 0f);
-                // Slide it sideways to the live lateral offset, so the player sees where the
-                // throw will start from. The aim arrow tracks the stone's transform, so it
-                // follows along on its own.
+                // Hard-pin the stone to its (offset) launch spot every step. This both holds it
+                // still on the unfrozen X/Z axes and slides it sideways to the live lateral
+                // offset, so the player sees where the throw will start from. The aim arrow
+                // tracks the stone's transform, so it follows along on its own.
                 rb.position        = startPosition + SheetRight * preview.LateralOffset;
             }
             return;
@@ -179,7 +187,7 @@ public class StoneLauncher : MonoBehaviour
         rb.linearVelocity  = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
         rb.linearDamping   = 0f;
-        rb.constraints     = RigidbodyConstraints.FreezePosition;
+        rb.constraints     = PreShotConstraints;
 
         transform.position = startPosition;
         transform.rotation = startRotation;
