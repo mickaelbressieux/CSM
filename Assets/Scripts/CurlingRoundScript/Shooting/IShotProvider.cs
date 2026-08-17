@@ -33,6 +33,12 @@ public interface IShotProvider
     float MaxCurl { get; }
 
     /// <summary>
+    /// The maximum lateral-offset magnitude this provider can produce, so the HUD can scale
+    /// its offset gauge without knowing the concrete provider type. Always positive.
+    /// </summary>
+    float MaxLateral { get; }
+
+    /// <summary>
     /// Re-arm the provider to accept a fresh shot. Called on round reset, after a shot
     /// has been fired and the stone reset to its start.
     /// </summary>

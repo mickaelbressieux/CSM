@@ -27,6 +27,10 @@ public class PlayerShotProvider : MonoBehaviour, IShotProvider, IShotContextRece
     public float maxCurlPower = 5f;
     public float curlChangeSpeed = 3f;
 
+    [Header("Lateral Offset")]
+    public float maxLateralOffset = 2f;      // max sideways shift of the launch point, in meters
+    public float lateralChangeSpeed = 2f;    // meters per second
+
     [Header("Aim Arrow")]
     public GameObject aimArrow;
     public float arrowYOffset = 0.05f;       // raise above the ice surface
@@ -37,6 +41,8 @@ public class PlayerShotProvider : MonoBehaviour, IShotProvider, IShotContextRece
     private float currentPower;
     // Negative = curl left, positive = curl right (relative to direction of travel).
     private float curlAmount = 0f;
+    // Sideways shift of the launch point. Negative = left, positive = right.
+    private float lateralOffset = 0f;
 
     // While armed, the provider reads input and can raise a shot. Set false the instant
     // Space is pressed so a shot cannot be fired twice, until Rearm() is called on reset.
@@ -47,10 +53,13 @@ public class PlayerShotProvider : MonoBehaviour, IShotProvider, IShotContextRece
 
     /// <inheritdoc/>
     public ShotData CurrentShot =>
-        new ShotData(Quaternion.Euler(0f, aimAngle, 0f) * Vector3.forward, currentPower, curlAmount);
+        new ShotData(Quaternion.Euler(0f, aimAngle, 0f) * Vector3.forward, currentPower, curlAmount, lateralOffset);
 
     /// <inheritdoc/>
     public float MaxCurl => maxCurlPower;
+
+    /// <inheritdoc/>
+    public float MaxLateral => maxLateralOffset;
 
     /// <inheritdoc/>
     // The manager injects the shared aim arrow (a scene object the prefab can't reference).
@@ -95,6 +104,14 @@ public class PlayerShotProvider : MonoBehaviour, IShotProvider, IShotContextRece
             curlAmount += curlChangeSpeed * Time.deltaTime;
         curlAmount = Mathf.Clamp(curlAmount, -maxCurlPower, maxCurlPower);
 
+        // A  →  offset left   |   D  →  offset right
+        // Shifts where the throw starts from, without touching the aim angle.
+        if (Keyboard.current.aKey.isPressed)
+            lateralOffset -= lateralChangeSpeed * Time.deltaTime;
+        if (Keyboard.current.dKey.isPressed)
+            lateralOffset += lateralChangeSpeed * Time.deltaTime;
+        lateralOffset = Mathf.Clamp(lateralOffset, -maxLateralOffset, maxLateralOffset);
+
         // Space  →  commit the shot
         if (Keyboard.current.spaceKey.wasPressedThisFrame)
             CommitShot();
@@ -127,10 +144,11 @@ public class PlayerShotProvider : MonoBehaviour, IShotProvider, IShotContextRece
     /// <inheritdoc/>
     public void Rearm()
     {
-        aimAngle     = 0f;
-        currentPower = (minPower + maxPower) / 2f;
-        curlAmount   = 0f;
-        armed        = true;
+        aimAngle      = 0f;
+        currentPower  = (minPower + maxPower) / 2f;
+        curlAmount    = 0f;
+        lateralOffset = 0f;
+        armed         = true;
 
         if (aimArrow != null) aimArrow.SetActive(true);
     }

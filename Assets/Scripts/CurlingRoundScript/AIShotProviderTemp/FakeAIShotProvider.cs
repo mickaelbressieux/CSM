@@ -23,6 +23,10 @@ public class FakeAIShotProvider : MonoBehaviour, IShotProvider, IShotContextRece
     public float baseCurl = 0f;
     [Tooltip("Random +/- variation added to baseCurl. Set 0 for an exact, repeatable curl.")]
     public float curlJitter = 0f;
+    [Tooltip("Sideways shift of the launch point, in meters. Negative = left, positive = right.")]
+    public float baseLateral = 0f;
+    [Tooltip("Random +/- variation added to baseLateral. Set 0 for an exact, repeatable offset.")]
+    public float lateralJitter = 0f;
 
     [Header("Behaviour")]
     [Tooltip("Seconds the AI 'thinks' before releasing, once it is its turn.")]
@@ -46,6 +50,10 @@ public class FakeAIShotProvider : MonoBehaviour, IShotProvider, IShotContextRece
     // The most curl this fake AI could apply on any given throw. Kept positive and non-zero
     // so a HUD gauge scaling by it never divides by zero (AI turns suppress the HUD anyway).
     public float MaxCurl => Mathf.Max(Mathf.Abs(baseCurl) + Mathf.Abs(curlJitter), 0.01f);
+
+    /// <inheritdoc/>
+    // Same reasoning as MaxCurl above: kept positive and non-zero for a HUD gauge to divide by.
+    public float MaxLateral => Mathf.Max(Mathf.Abs(baseLateral) + Mathf.Abs(lateralJitter), 0.01f);
 
     /// <inheritdoc/>
     // The manager injects the house center to aim at, so the target need not be baked into the
@@ -78,6 +86,10 @@ public class FakeAIShotProvider : MonoBehaviour, IShotProvider, IShotContextRece
     private ShotData BuildShot()
     {
         // Aim flat along the ice toward the target; fall back to forward if unset.
+        // Deliberately aimed from the un-shifted spawn, NOT from the laterally offset launch
+        // point: re-aiming would cancel the offset out and land the stone in the same spot.
+        // Aiming from here makes the offset parallel-translate the path, exactly as it does
+        // for the player — which is what makes baseLateral a useful knob.
         Vector3 dir = Vector3.forward;
         if (target != null)
         {
@@ -85,9 +97,10 @@ public class FakeAIShotProvider : MonoBehaviour, IShotProvider, IShotContextRece
             dir.y = 0f;
         }
 
-        float power = basePower + UnityEngine.Random.Range(-powerJitter, powerJitter);
-        float curl  = baseCurl  + UnityEngine.Random.Range(-curlJitter, curlJitter);
-        return new ShotData(dir, power, curl);
+        float power   = basePower   + UnityEngine.Random.Range(-powerJitter, powerJitter);
+        float curl    = baseCurl    + UnityEngine.Random.Range(-curlJitter, curlJitter);
+        float lateral = baseLateral + UnityEngine.Random.Range(-lateralJitter, lateralJitter);
+        return new ShotData(dir, power, curl, lateral);
     }
 
     /// <inheritdoc/>

@@ -358,7 +358,7 @@ public class SoloCurlingGameManager : MonoBehaviour
             soloCurlingUI.SetActiveShot(launcher, isAI ? null : provider);
             soloCurlingUI.SetBanner(isAI
                 ? $"AI is throwing... ({CountThrown(true)}/{stonesPerSide})"
-                : $"Your throw ({CountThrown(false)}/{stonesPerSide}) - arrows aim/power, Q/E curl, Space to shoot");
+                : $"Your throw ({CountThrown(false)}/{stonesPerSide}) - arrows aim/power, Q/E curl, A/D offset, Space to shoot");
         }
 
         // Wait for the shot to be released (or a forced skip)...

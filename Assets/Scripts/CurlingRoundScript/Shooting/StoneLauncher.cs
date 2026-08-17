@@ -45,6 +45,19 @@ public class StoneLauncher : MonoBehaviour
     /// <summary>The stone's Rigidbody, exposed so abilities can affect the shot in flight.</summary>
     public Rigidbody Body => rb;
 
+    // The axis a ShotData.LateralOffset shifts the launch position along. World +X, because
+    // the whole shot system reasons in world axes (PlayerShotProvider aims relative to
+    // Vector3.forward), so the sheet runs along world +Z.
+    // If the sheet is ever rotated in the scene, use startRotation * Vector3.right instead.
+    private static Vector3 SheetRight => Vector3.right;
+
+    // How an unshot stone is held in place. Only Y is frozen — X/Z are left free ON PURPOSE so
+    // the lateral-offset preview can reposition the stone: the solver treats a frozen linear
+    // axis as authoritative and reverts any rb.position write on it, which would silently undo
+    // the preview. X/Z are instead pinned in code, by writing rb.position and zeroing the
+    // velocity every FixedUpdate while unshot (see the pre-shot branch below).
+    private const RigidbodyConstraints PreShotConstraints = RigidbodyConstraints.FreezePositionY;
+
     // The committed shot, stashed from ShotReady and applied on the next FixedUpdate so
     // the impulse is visible to the physics engine before the stop-check runs.
     private ShotData pendingShot;
@@ -62,7 +75,7 @@ public class StoneLauncher : MonoBehaviour
 
         rb.linearVelocity  = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
-        rb.constraints     = RigidbodyConstraints.FreezePosition;
+        rb.constraints     = PreShotConstraints;
     }
 
     private void OnEnable()
@@ -104,6 +117,11 @@ public class StoneLauncher : MonoBehaviour
             activeCurl       = pendingShot.Curl;
             rb.constraints   = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
             rb.linearDamping = slideDrag;
+            // Shift the launch position sideways before the impulse, so the trajectory is
+            // parallel-translated rather than rotated. Re-applied here (not only in the
+            // pre-shot preview below) because a provider may commit an offset it never
+            // previewed — the AI, for instance, composes its whole shot at release time.
+            rb.position      = startPosition + SheetRight * pendingShot.LateralOffset;
             rb.AddForce(pendingShot.Direction * pendingShot.Power, ForceMode.Impulse);
             // Set spin once at launch — positive curl spins clockwise (right curl).
             // Let angular damping decay it naturally; do NOT override each frame.
@@ -117,10 +135,15 @@ public class StoneLauncher : MonoBehaviour
         {
             if (!HasBeenShot)
             {
+                ShotData preview   = provider != null ? provider.CurrentShot : default(ShotData);
                 rb.linearVelocity  = Vector3.zero;
                 // Spin stone for visual pre-shot feedback, driven by the live aim curl.
-                float previewCurl  = provider != null ? provider.CurrentShot.Curl : 0f;
-                rb.angularVelocity = new Vector3(0f, previewCurl * preShotSpinSpeed, 0f);
+                rb.angularVelocity = new Vector3(0f, preview.Curl * preShotSpinSpeed, 0f);
+                // Hard-pin the stone to its (offset) launch spot every step. This both holds it
+                // still on the unfrozen X/Z axes and slides it sideways to the live lateral
+                // offset, so the player sees where the throw will start from. The aim arrow
+                // tracks the stone's transform, so it follows along on its own.
+                rb.position        = startPosition + SheetRight * preview.LateralOffset;
             }
             return;
         }
@@ -164,7 +187,7 @@ public class StoneLauncher : MonoBehaviour
         rb.linearVelocity  = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
         rb.linearDamping   = 0f;
-        rb.constraints     = RigidbodyConstraints.FreezePosition;
+        rb.constraints     = PreShotConstraints;
 
         transform.position = startPosition;
         transform.rotation = startRotation;
