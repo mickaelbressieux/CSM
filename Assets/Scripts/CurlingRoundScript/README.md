@@ -115,7 +115,20 @@ CurlingRoundScript/
 │   ├── IShotProvider.cs          launch seam: ShotReady / CurrentShot / MaxCurl / Rearm
 │   ├── IShotContextReceiver.cs   context seam: Configure(ShotContext) for scene refs
 │   ├── PlayerShotProvider.cs     human input half (keyboard → ShotData)
-│   └── StoneLauncher.cs          physics half (ShotData → impulse, curl, stop)
+│   ├── StoneLauncher.cs          physics half (ShotData → impulse, curl, stop)
+│   ├── Stone.cs                  the stone entity: side, phase, Rigidbody, powers, scoring
+│   ├── StoneAbility.cs           base class for a power (physics hooks + scoring hook)
+│   ├── MatchEvents.cs            static event hub for match milestones
+│   └── Abilities/                ← the powers themselves
+│       ├── HeavyStoneAbility.cs      x2 mass, launch speed preserved
+│       ├── StoppableStoneAbility.cs  brake mid-slide on a key press
+│       ├── DoubleScoreAbility.cs     counts double when it scores
+│       └── ExtraPowerAbility.cs      minimal sample / reference power
+├── Inventory/                    ← what the player owns (see "Special stones" below)
+│   ├── StonePowerDefinition.cs   abstract SO: catalogue entry + AttachTo(stone)
+│   ├── StoneLoadout.cs           one owned stone = name + list of powers
+│   ├── StoneInventory.cs         the "Inventory" GameObject; the player's stones
+│   └── Definitions/              one SO subclass per power (Heavy / Stoppable / DoubleScore)
 ├── AIShotProviderTemp/           ← throwaway demo, meant to be replaced
 │   └── FakeAIShotProvider.cs     a dumb AI proving the seams work
 ├── SoloCurlingGameManager.cs     orchestrator: modes, prefab spawning, turns, scoring
@@ -220,6 +233,92 @@ test-mode result panel. `SetActiveShot(stone, provider)` reassigns it each turn 
 provider suppresses the aiming HUD** (used on AI turns); the serialized `provider` field is only
 the inspector default for TestDrop and is not broken by the interface routing.
 
+---
+
+## Special stones
+
+A "special stone" is an ordinary stone prefab with extra `StoneAbility` components bolted on **at
+spawn time**. Nothing about a power is baked into a prefab, so the same two prefabs
+(`playerStonePrefab` / `aiStonePrefab`) serve every combination.
+
+### The chain
+
+```mermaid
+flowchart LR
+    A["StonePowerDefinition (SO asset)<br/>id / name / description / icon / tuning"]
+    B["StoneLoadout<br/>one owned stone = 0..N powers"]
+    C["StoneInventory<br/>MonoBehaviour on the 'Inventory' GameObject"]
+    D["SoloCurlingGameManager.BuildStone<br/>loadout.ApplyTo(stone) while INACTIVE"]
+    E["StoneAbility components on the stone"]
+    F["Stone.Abilities"]
+
+    A --> B --> C --> D --> E --> F
+    F -->|physics hooks| G[StoneLauncher]
+    F -->|ModifyStonePoints| H["ComputeMatchResult()"]
+    F -->|PowerName / HudHint| I[CurlingUIManager]
+```
+
+### Two kinds of hook
+
+`StoneAbility` now covers both halves of what a power can do:
+
+| Family | Hooks | Fired by |
+| --- | --- | --- |
+| **Physics** | `OnLaunch` / `OnSlideTick` / `OnStopped` / `OnStoneCollision` | `StoneLauncher`, every physics step |
+| **Scoring** | `ModifyStonePoints(int)` | `Stone.ScorePoints()`, when the end is counted |
+
+Both are **chained across every ability on the stone**, which is what makes powers stack — two
+Double Score components give ×4 because the point value is threaded through both.
+
+### The three powers
+
+- **Heavy** (`HeavyStoneAbility`) — multiplies mass by 2 in `Awake`, so it wins collisions and
+  resists being knocked out. Because an impulse gives Δv = impulse / mass, `OnLaunch` tops the
+  launch impulse up by the same factor, so the throw still travels its normal distance: a pure
+  momentum upgrade rather than a throw that suddenly falls short.
+- **Stoppable** (`StoppableStoneAbility`) — press **S** mid-slide to halt the stone
+  (`usesPerThrow` brakes per throw, one by default; `brakeDeceleration > 0` for a skid instead of a
+  dead stop). The key is latched in `Update` and consumed in `OnSlideTick`, because a
+  `wasPressedThisFrame` read inside FixedUpdate is missed or double-counted. It never touches the
+  launcher: once the velocity is zero, the launcher's own stop-detection ends the shot normally.
+- **Double Score** (`DoubleScoreAbility`) — overrides only `ModifyStonePoints`. It applies to a
+  stone that *already* counts; which stones count stays entirely in `ComputeMatchResult()`.
+
+> **Reading the shot inside a power.** `launcher.Body.linearVelocity` is still **zero** in
+> `OnLaunch` — `AddForce` is only integrated by the physics step at the end of that FixedUpdate.
+> Use `launcher.ActiveShot` (Direction / Power / Curl / LateralOffset) instead. Both
+> `HeavyStoneAbility` and the `ExtraPowerAbility` sample show the pattern.
+
+### The catalogue and the inventory
+
+A power is authored as a **ScriptableObject asset** (`Create ▸ Curling ▸ Powers ▸ …`) carrying its
+identity, presentation and tuning, plus an `AttachTo(GameObject)` that adds the matching component
+and copies the tuning across. Adding a fourth power is *one ability class + one definition subclass
++ one asset* — no enum to extend and no factory switch to update, and story mode's shop will read
+name / description / icon straight off the same asset instead of a parallel table.
+
+`StoneInventory` (on an "Inventory" GameObject, wired into the manager's `playerStoneInventory`)
+holds the player's `StoneLoadout`s. In a match the player's throws consume the list **in order** —
+throw 0 → stone `[0]`, and a throw past the end of the list gets an ordinary stone, so a missing or
+short inventory never breaks a round. TestDrop mode always uses stone `[0]`, which makes it a quick
+way to try one power. `AddStone` / `AddPower` / `RemovePower` / `InventoryChanged` are the runtime
+API story mode will drive.
+
+### Timing contract (the one thing to not break)
+
+Powers **must** be attached while the stone GameObject is still inactive. `BuildStone` already
+instantiates with `SetActive(false)`, wires the provider and context, and only then activates —
+`loadout.ApplyTo(go)` goes inside that window, so the components exist before `Stone.Awake` caches
+them into `Stone.Abilities` and before `StoneLauncher` starts firing hooks.
+
+### Not yet wired to story mode
+
+`StoneInventory` is deliberately independent of `CampainManager`: that manager's inventory is a
+`Dictionary<string,int>` of item id → quantity, which cannot express "stone #2 carries powers A and
+B". Bridging them is a story-mode task, and `StonePowerDefinition.powerId` is the key it will use.
+
+---
+
 ### Independent utilities
 
 **[`CameraSwitcher`](CameraSwitcher.cs)** — cycles a `Camera[]` with **Tab** (configurable
@@ -269,16 +368,20 @@ configurable `playerTag` to its GameObject in both edit and play mode (via `OnVa
 
 ## Extension points (foundations for later work)
 
-Three seams exist so the planned features can be built without touching the launch pipeline:
+Four seams exist so the planned features can be built without touching the launch pipeline:
 
 - **`Stone` entity** ([Shooting/Stone.cs](Shooting/Stone.cs)) — identity (`Side`) + lifecycle
-  (`Phase`: Idle/Sliding/Stopped/Lost) + cached `Body`. The thing systems hang off of instead of
-  raw GameObjects.
+  (`Phase`: Idle/Sliding/Stopped/Lost) + cached `Body` + `Abilities` (the stone's powers) +
+  `ScorePoints()`. The thing systems hang off of instead of raw GameObjects.
 - **Stackable powers** ([Shooting/StoneAbility.cs](Shooting/StoneAbility.cs)) — subclass
-  `StoneAbility` and override any of `OnLaunch` / `OnSlideTick` / `OnStopped` / `OnStoneCollision`.
-  `StoneLauncher` fires each hook on **every** `StoneAbility` on the stone, so powers **stack** by
-  simply adding more components. `OnSlideTick` is the hook for in-flight powers (e.g. "brake on
-  key press"). See the sample [Abilities/ExtraPowerAbility.cs](Shooting/Abilities/ExtraPowerAbility.cs).
+  `StoneAbility` and override any of `OnLaunch` / `OnSlideTick` / `OnStopped` / `OnStoneCollision`
+  (physics) or `ModifyStonePoints` (scoring). Every hook is fired on **every** `StoneAbility` on the
+  stone, so powers **stack** by simply adding more components. See
+  [Abilities/](Shooting/Abilities/) for the three real powers and the minimal
+  [ExtraPowerAbility.cs](Shooting/Abilities/ExtraPowerAbility.cs) sample.
+- **Power catalogue + inventory** ([Inventory/](Inventory/)) — a `StonePowerDefinition` asset per
+  power, `StoneLoadout` for one owned stone, `StoneInventory` for the collection. See the
+  "Special stones" section above. This is where story mode (buying / upgrading) plugs in.
 - **Match events** ([Shooting/MatchEvents.cs](Shooting/MatchEvents.cs)) — a static hub raising
   `TurnStarted` / `StoneReleased` / `StoneStopped` / `StoneLost` / `EndScored`. Anything (a power,
   the UI, audio) can subscribe in `OnEnable` and unsubscribe in `OnDisable` without wiring a

@@ -51,10 +51,12 @@ public class CurlingUIManager : MonoBehaviour
             return;
         }
 
-        // A shot is sliding.
+        // A shot is sliding. Powers still show, so an in-flight hint (e.g. the Stoppable stone's
+        // brake key) is on screen exactly while it can be used.
         if (stone != null && stone.HasBeenShot && !stone.ShotFinished)
         {
-            infoText.text = string.IsNullOrEmpty(banner) ? "The stone is sliding..." : banner;
+            string sliding = string.IsNullOrEmpty(banner) ? "The stone is sliding..." : banner;
+            infoText.text = sliding + PowersBlock();
             return;
         }
 
@@ -94,7 +96,34 @@ public class CurlingUIManager : MonoBehaviour
             $"Power:  {power:F1}\n" +
             $"Curl:   {curlBar} {curl:+0.0;-0.0;0.0}\n" +
             $"Offset: {lateralBar} {lateral:+0.0;-0.0;0.0}\n" +
-            $"Aim: {aim.x:F2}, {aim.z:F2}";
+            $"Aim: {aim.x:F2}, {aim.z:F2}" +
+            PowersBlock();
+    }
+
+    // Lists the special powers on the active stone, plus any hint a power wants shown right now
+    // (StoneAbility.HudHint). Reads them off the Stone entity, so the HUD names no concrete
+    // ability type and a new power appears here for free. Empty string when the stone is ordinary.
+    private string PowersBlock()
+    {
+        if (stone == null)
+            return "";
+
+        Stone id = stone.GetComponent<Stone>();
+        if (id == null || id.Abilities.Count == 0)
+            return "";
+
+        string names = "";
+        string hints = "";
+        for (int i = 0; i < id.Abilities.Count; i++)
+        {
+            StoneAbility ability = id.Abilities[i];
+            names += (names.Length == 0 ? "" : ", ") + ability.PowerName;
+
+            string hint = ability.HudHint;
+            if (!string.IsNullOrEmpty(hint)) hints += "\n" + hint;
+        }
+
+        return "\n\nPowers: " + names + hints;
     }
 
     // Shows a centred bar: <<<..|..... (left) or .....|..>>> (right).
