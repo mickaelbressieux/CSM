@@ -16,4 +16,5 @@ MonoBehaviour:
   displayName: 
   description: 
   icon: {fileID: 0}
+  visualPrefab: {fileID: 2894982507623501340, guid: 6d24d8512fa20c7418949574254081b7, type: 3}
   scoreMultiplier: 2

@@ -6,6 +6,9 @@ public class HeavyPowerDefinition : StonePowerDefinition
 {
     protected override string DefaultDisplayName => "Heavy Stone";
 
+    // Buffs only the stone carrying it -> the stone body is what changes.
+    public override PowerCategory Category => PowerCategory.PassiveSelf;
+
     [Header("Tuning")]
     [Tooltip("Mass is multiplied by this. 2 = twice as heavy.")]
     public float massMultiplier = 2f;

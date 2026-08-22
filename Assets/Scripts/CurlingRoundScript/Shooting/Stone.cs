@@ -43,6 +43,14 @@ public class Stone : MonoBehaviour
         RefreshAbilities();
     }
 
+    // Also refresh on every activation, NOT just in Awake. Awake runs once per component lifetime,
+    // and Instantiate() runs it immediately when the prefab root is saved active — i.e. BEFORE the
+    // spawn path has attached the stone's powers. Caching only in Awake therefore left Abilities
+    // permanently empty, silently killing every power, and made the whole system depend on an
+    // invisible "is the prefab asset active?" flag. OnEnable re-runs on SetActive(true), and the
+    // spawn path calls RefreshAbilities() explicitly as well.
+    private void OnEnable() => RefreshAbilities();
+
     public void SetPhase(StonePhase phase) => Phase = phase;
 
     /// <summary>Re-scan the GameObject for abilities. Only needed if a power is added after Awake

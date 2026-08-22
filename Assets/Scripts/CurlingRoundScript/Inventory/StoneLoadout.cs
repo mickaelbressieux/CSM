@@ -39,9 +39,9 @@ public class StoneLoadout
     }
 
     /// <summary>
-    /// Attach every power to a freshly spawned stone. MUST be called while the GameObject is still
-    /// inactive, so the components exist before Awake/OnEnable run — see the timing note on
-    /// <see cref="StonePowerDefinition"/>.
+    /// Attach every power to a freshly spawned stone, then dress it so the powers are readable at a
+    /// glance. MUST be called while the GameObject is still inactive, so the components exist before
+    /// Awake/OnEnable run — see the timing note on <see cref="StonePowerDefinition"/>.
     /// </summary>
     public void ApplyTo(GameObject stone)
     {
@@ -53,6 +53,16 @@ public class StoneLoadout
             if (power != null)
                 power.AttachTo(stone);
         }
+
+        // Tell the entity its powers changed. Required, not defensive: Stone caches its ability
+        // list, and if the prefab root is saved ACTIVE then Instantiate() already ran Stone.Awake
+        // before we got here — so that cache predates every component just added. Refreshing here
+        // makes the powers work regardless of how the prefab happens to be saved.
+        stone.GetComponent<Stone>()?.RefreshAbilities();
+
+        // One call with the whole set, so StoneVisuals can lay out stacked attachments and enforce
+        // the "only one body" rule in a single place. A prefab with no StoneVisuals just stays plain.
+        stone.GetComponent<StoneVisuals>()?.Apply(powers);
     }
 
     /// <summary>"Stone 1 (Heavy, Double Score)" — for HUD lines and inventory screens.</summary>

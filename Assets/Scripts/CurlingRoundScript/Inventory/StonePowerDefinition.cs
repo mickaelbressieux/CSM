@@ -36,6 +36,21 @@ public abstract class StonePowerDefinition : ScriptableObject
     [TextArea] public string description;
     public Sprite icon;
 
+    [Header("Visual")]
+    [SerializeField, Tooltip("The art for this power. Where it goes on the stone is decided by " +
+        "Category — antenna, stone body, or flag. Leave empty and the power still works, just " +
+        "without a distinctive look.")]
+    private GameObject visualPrefab;
+
+    /// <summary>What kind of power this is. Intrinsic to the power rather than an authorable field,
+    /// so it can never be misconfigured per asset. It also picks the visual channel — see
+    /// <see cref="StoneVisuals"/> — and will group the story-mode shop.</summary>
+    public abstract PowerCategory Category { get; }
+
+    /// <summary>This power's art, hung on the socket its <see cref="Category"/> dictates.
+    /// Null is fine: the power works, it just has no distinctive look yet.</summary>
+    public GameObject VisualPrefab => visualPrefab;
+
     /// <summary>Stable save/shop key. Falls back to the asset's file name.</summary>
     public string PowerId => string.IsNullOrWhiteSpace(powerId) ? name : powerId;
 

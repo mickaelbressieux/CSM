@@ -16,5 +16,6 @@ MonoBehaviour:
   displayName: 
   description: 
   icon: {fileID: 0}
+  visualPrefab: {fileID: 3743579720670027299, guid: 45daeb93f838d704e909dd2084058ff0, type: 3}
   massMultiplier: 2
   preserveLaunchSpeed: 1

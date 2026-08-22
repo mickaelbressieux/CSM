@@ -118,6 +118,7 @@ CurlingRoundScript/
 │   ├── StoneLauncher.cs          physics half (ShotData → impulse, curl, stop)
 │   ├── Stone.cs                  the stone entity: side, phase, Rigidbody, powers, scoring
 │   ├── StoneAbility.cs           base class for a power (physics hooks + scoring hook)
+│   ├── StoneVisuals.cs           hangs each power's art on the socket its category dictates
 │   ├── MatchEvents.cs            static event hub for match milestones
 │   └── Abilities/                ← the powers themselves
 │       ├── HeavyStoneAbility.cs      x2 mass, launch speed preserved
@@ -126,6 +127,7 @@ CurlingRoundScript/
 │       └── ExtraPowerAbility.cs      minimal sample / reference power
 ├── Inventory/                    ← what the player owns (see "Special stones" below)
 │   ├── StonePowerDefinition.cs   abstract SO: catalogue entry + AttachTo(stone)
+│   ├── PowerCategory.cs          Activated / PassiveSelf / PassiveOther — picks the visual channel
 │   ├── StoneLoadout.cs           one owned stone = name + list of powers
 │   ├── StoneInventory.cs         the "Inventory" GameObject; the player's stones
 │   └── Definitions/              one SO subclass per power (Heavy / Stoppable / DoubleScore)
@@ -256,6 +258,7 @@ flowchart LR
     F -->|physics hooks| G[StoneLauncher]
     F -->|ModifyStonePoints| H["ComputeMatchResult()"]
     F -->|PowerName / HudHint| I[CurlingUIManager]
+    D -->|"Apply(powers)"| J["StoneVisuals<br/>category → antenna / body / flag"]
 ```
 
 ### Two kinds of hook
@@ -303,6 +306,43 @@ throw 0 → stone `[0]`, and a throw past the end of the list gets an ordinary s
 short inventory never breaks a round. TestDrop mode always uses stone `[0]`, which makes it a quick
 way to try one power. `AddStone` / `AddPower` / `RemovePower` / `InventoryChanged` are the runtime
 API story mode will drive.
+
+### The visual language
+
+A player must be able to read a stone's powers off its silhouette, and that has to keep working as
+powers accumulate — so the mapping is a **fixed grammar**, not a per-power art choice. A power's
+`PowerCategory` decides *which channel* its art uses; the power itself supplies the *mesh* in that
+channel. Every activated power wears an antenna, but no two antennas look alike.
+
+| Category | Meaning | Channel |
+| --- | --- | --- |
+| `Activated` | the player triggers it (Stoppable) | **antenna** above the handle |
+| `PassiveSelf` | buffs the stone itself (Heavy) | the **stone body** is swapped |
+| `PassiveOther` | affects scoring / other stones (Double Score) | small **flag** on the rim |
+
+The mapping lives in exactly one method — `StoneVisuals.SocketFor(PowerCategory)` — so changing the
+language is a one-line edit and no power can drift out of it. `Category` is an abstract property on
+each definition subclass rather than a serialized field, so it cannot be misconfigured per asset.
+
+`StoneVisuals` sits on the stone prefab root and is handed the **whole power set** in one call from
+`StoneLoadout.ApplyTo`. That is what lets it own the two rules that need global knowledge: stacked
+antennas/flags are spread sideways (and kept centred) instead of z-fighting, and only the **first**
+`PassiveSelf` power swaps the body — a stone cannot wear two, and a second logs a warning naming both.
+
+> **A body swap never touches physics.** The `stone` child carries the convex MeshCollider *and* the
+> ice physic material — it is the collision body, not just a mesh. So a body power disables that
+> renderer (`bodyRenderer.enabled = false`, **not** `SetActive(false)`, which would take the collider
+> with it) and parents a replacement mesh alongside. Every stone therefore collides identically
+> whatever it carries, which keeps the physics fair and predictable. **Body prefabs must contain no
+> collider.** A stone that starts bouncing oddly means one slipped in.
+
+> **Scale.** The stone root is scaled to `0.06`, so anything parented under it inherits that — the
+> same trap the aim arrow hit. Each socket carries a `localScale` of ≈ `16.667` (1 / 0.06) so
+> attachment prefabs can be authored at real metre scale.
+
+Art is only ever a prefab reference (`StonePowerDefinition.visualPrefab`), so a primitive placeholder
+becomes a modelled Blender mesh by swapping one field — no code change. A power with no art still
+works mechanically and still shows in the HUD; it just logs one warning.
 
 ### Timing contract (the one thing to not break)
 

@@ -8,6 +8,9 @@ public class StoppablePowerDefinition : StonePowerDefinition
 {
     protected override string DefaultDisplayName => "Stoppable Stone";
 
+    // The player triggers it mid-slide -> it wears an antenna.
+    public override PowerCategory Category => PowerCategory.Activated;
+
     [Header("Tuning")]
     [Tooltip("Key that stops the stone mid-slide.")]
     public Key stopKey = Key.S;

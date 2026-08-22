@@ -16,6 +16,7 @@ MonoBehaviour:
   displayName: 
   description: 
   icon: {fileID: 0}
+  visualPrefab: {fileID: 7822192432572743327, guid: 4cffb64918d9bd040b7d3c7909eb2a01, type: 3}
   stopKey: 33
   usesPerThrow: 1
   brakeDeceleration: 0
