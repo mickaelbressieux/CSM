@@ -1423,7 +1423,8 @@ MonoBehaviour:
     powers:
     - {fileID: 11400000, guid: 9bcf247ccebc3614c8e78c21fa497382, type: 2}
   - displayName: 
-    powers: []
+    powers:
+    - {fileID: 11400000, guid: 8f18a4646ef6ae44ba6f1758d061c44e, type: 2}
   - displayName: 
     powers:
     - {fileID: 11400000, guid: 9d653541797c4654eabd8cf019cd2bda, type: 2}
