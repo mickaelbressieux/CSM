@@ -121,11 +121,40 @@ public class SceneTransitionTrigger : MonoBehaviour
     [SerializeField] private GameObject designatedObject;
     [SerializeField] private bool debugLogs = true;
 
+    [Header("Effect")]
+    // A component implementing ITransitionEffect (e.g. ExplosionEffect). Serialized as a
+    // MonoBehaviour so any effect can be wired in from the inspector without this trigger
+    // naming a concrete type. Leave empty to load the scene immediately.
+    [SerializeField] private MonoBehaviour transitionEffectSource;
+
     [Header("Data To Send")]
     [SerializeField] private string enemyType = "DefaultEnemy";
     [SerializeField] private string mapType = "DefaultMap";
 
     private bool hasTriggered;
+    // Separate from hasTriggered, which is only honoured when triggerOnlyOnce is set: without
+    // this, a re-entry while the effect is still playing would queue a second scene load.
+    private bool isTransitioning;
+
+    /// <summary>
+    /// When false, the trigger ignores anything that walks into it.
+    ///
+    /// This exists because disabling the component is not enough: Unity still delivers
+    /// OnTriggerEnter to a disabled MonoBehaviour, so a "switched off" trigger would keep
+    /// firing. Runtime-only and not serialized, so it comes back armed on every scene load and
+    /// whatever owns the trigger's state (see <see cref="CampaignMatchNode"/>) re-applies it.
+    /// </summary>
+    public bool IsArmed { get; set; } = true;
+
+    /// <summary>
+    /// Raised once this trigger has committed to a transition, before any effect plays and
+    /// before the scene loads. The argument is the object that walked in.
+    ///
+    /// This is the hook for anything that needs to record the world as it was at the moment of
+    /// contact - <see cref="CampaignMatchNode"/> uses it to remember where the player was
+    /// standing, which is only knowable now and not after the scene has changed.
+    /// </summary>
+    public event Action<GameObject> TransitionStarted;
 
 #if UNITY_EDITOR
     private void OnValidate()
@@ -166,6 +195,11 @@ public class SceneTransitionTrigger : MonoBehaviour
 
     private void TryTrigger(GameObject other)
     {
+        if (!IsArmed || isTransitioning)
+        {
+            return;
+        }
+
         if (hasTriggered && triggerOnlyOnce)
         {
             if (debugLogs)
@@ -204,7 +238,29 @@ public class SceneTransitionTrigger : MonoBehaviour
             Debug.Log($"SceneTransitionTrigger '{name}': tentative de chargement de la scene '{targetSceneName}'.");
         }
 
+        // Snapshot the world now, at the moment of contact, rather than after the effect: the
+        // player is about to be animated away and then the scene is going to change.
+        TransitionStarted?.Invoke(other);
         SceneTransitionData data = BuildTransitionData(manager);
+
+        ITransitionEffect effect = ResolveEffect();
+        if (effect == null)
+        {
+            LoadTargetScene(manager, data);
+            return;
+        }
+
+        isTransitioning = true;
+        if (debugLogs)
+        {
+            Debug.Log($"SceneTransitionTrigger '{name}': lecture de l'effet de transition avant chargement.");
+        }
+
+        effect.Play(() => LoadTargetScene(manager, data));
+    }
+
+    private void LoadTargetScene(CampainManager manager, SceneTransitionData data)
+    {
         if (manager.LoadScene(targetSceneName, data))
         {
             hasTriggered = true;
@@ -212,11 +268,35 @@ public class SceneTransitionTrigger : MonoBehaviour
             {
                 Debug.Log($"SceneTransitionTrigger '{name}': chargement de scene lance avec succes.");
             }
+
+            return;
         }
-        else if (debugLogs)
+
+        // The load was refused (missing from the build profile, most likely). Release the
+        // guard so the player is not stuck against a dead trigger.
+        isTransitioning = false;
+        if (debugLogs)
         {
             Debug.LogWarning($"SceneTransitionTrigger '{name}': echec du chargement de scene '{targetSceneName}'. Regarde les warnings CampainManager.");
         }
+    }
+
+    private ITransitionEffect ResolveEffect()
+    {
+        if (transitionEffectSource == null)
+        {
+            return null;
+        }
+
+        if (transitionEffectSource is ITransitionEffect effect)
+        {
+            return effect;
+        }
+
+        Debug.LogError(
+            $"{nameof(SceneTransitionTrigger)}: assigned transitionEffectSource does not implement ITransitionEffect.",
+            this);
+        return null;
     }
 
     private bool MatchesTriggerObject(GameObject other)

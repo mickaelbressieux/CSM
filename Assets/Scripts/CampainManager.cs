@@ -31,6 +31,14 @@ public class CampainManager : MonoBehaviour
     private readonly Dictionary<string, int> characterInventory = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> characterSkills = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
+    // Campaign progress. This object outlives the scene, which is the whole point: it is what
+    // carries the player's place on the map and which nodes are done across a trip to the
+    // curling scene and back.
+    private readonly HashSet<string> clearedNodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private bool hasReturnPoint;
+    private Vector3 returnPlayerPosition;
+    private Vector3? returnCameraPosition;
+
     public static CampainManager Instance { get; private set; }
 
     public event Action<string, int> OnInventoryChanged;
@@ -245,6 +253,37 @@ public class CampainManager : MonoBehaviour
         return GetSkillsSnapshot();
     }
 
+    // ------------------------------------------------------------------
+    // Campaign progress
+    // ------------------------------------------------------------------
+
+    public bool IsNodeCleared(string nodeId)
+    {
+        return !string.IsNullOrWhiteSpace(nodeId) && clearedNodes.Contains(nodeId);
+    }
+
+    public void MarkNodeCleared(string nodeId)
+    {
+        if (string.IsNullOrWhiteSpace(nodeId))
+        {
+            return;
+        }
+
+        clearedNodes.Add(nodeId);
+    }
+
+    /// <summary>
+    /// Remember where the player (and optionally the camera) stood, so leaving the campaign
+    /// and coming back puts them exactly where they were rather than at the scene's authored
+    /// start. Restored automatically the next time a campaign scene loads.
+    /// </summary>
+    public void StoreReturnPoint(Vector3 playerPosition, Vector3? cameraPosition = null)
+    {
+        returnPlayerPosition = playerPosition;
+        returnCameraPosition = cameraPosition;
+        hasReturnPoint = true;
+    }
+
     public bool LoadScene(string sceneName)
     {
         return LoadScene(sceneName, null);
@@ -317,6 +356,10 @@ public class CampainManager : MonoBehaviour
 
     private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        // Before the transition-data dispatch below, which returns early when there is no
+        // payload - and the trip back from a match carries none.
+        RestoreReturnPoint();
+
         if (LastTransitionData == null)
         {
             return;
@@ -328,6 +371,39 @@ public class CampainManager : MonoBehaviour
             return;
         }
 
+        DispatchTransitionData();
+    }
+
+    /// <summary>
+    /// Put the player back where they left. Presence of a campaign player is the test for
+    /// "this is a campaign scene", so the stored point simply waits through the curling scene
+    /// instead of needing a scene name configured here.
+    /// </summary>
+    private void RestoreReturnPoint()
+    {
+        if (!hasReturnPoint)
+        {
+            return;
+        }
+
+        PlayerMotionCampagne player = FindFirstObjectByType<PlayerMotionCampagne>();
+        if (player == null)
+        {
+            return;
+        }
+
+        player.transform.position = returnPlayerPosition;
+
+        if (returnCameraPosition.HasValue && Camera.main != null)
+        {
+            Camera.main.transform.position = returnCameraPosition.Value;
+        }
+
+        hasReturnPoint = false;
+    }
+
+    private void DispatchTransitionData()
+    {
         MonoBehaviour[] allBehaviours = FindObjectsOfType<MonoBehaviour>(true);
         foreach (MonoBehaviour behaviour in allBehaviours)
         {

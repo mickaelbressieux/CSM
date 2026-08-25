@@ -1158,6 +1158,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1556265699}
   - component: {fileID: 1556265698}
+  - component: {fileID: 1556265700}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -1177,7 +1178,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1492ee1e1a7bb664ca42f37c9f9dfdf4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SoloCurlingGameManager
-  mode: 0
+  mode: 1
   houseCenter: {fileID: 637207734}
   stoneStartPoint: {fileID: 912073182}
   playerStonePrefab: {fileID: 5192512233105137483, guid: c7c6ce6f3da1b884297195c1225ba704, type: 3}
@@ -1211,6 +1212,22 @@ Transform:
   m_Children: []
   m_Father: {fileID: 673811803}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1556265700
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1556265697}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a2cecef39ef0f6541b5b5ead6ab9b5b6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ReturnToCampaignOnMatchEnd
+  campaignSceneName: CampagneMap
+  returnDelay: 5
+  fadeDuration: 0.5
+  curlingUI: {fileID: 0}
 --- !u!1 &1789116931
 GameObject:
   m_ObjectHideFlags: 0

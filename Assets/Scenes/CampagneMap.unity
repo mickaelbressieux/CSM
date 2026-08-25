@@ -150,6 +150,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CampainManager
   persistBetweenScenes: 1
   startingInventory: []
+  startingSkills: []
 --- !u!4 &160449608
 Transform:
   m_ObjectHideFlags: 0
@@ -307,6 +308,7 @@ GameObject:
   - component: {fileID: 849519814}
   - component: {fileID: 849519818}
   - component: {fileID: 849519819}
+  - component: {fileID: 849519820}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -458,6 +460,18 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!114 &849519820
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 849519813}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 361866dd2f37d3b459869e60c99d0c45, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerInventory
 --- !u!1 &1040333174
 GameObject:
   m_ObjectHideFlags: 0
@@ -470,7 +484,6 @@ GameObject:
   - component: {fileID: 1040333178}
   - component: {fileID: 1040333177}
   - component: {fileID: 1040333176}
-  - component: {fileID: 1040333180}
   m_Layer: 0
   m_Name: Cube
   m_TagString: Untagged
@@ -524,7 +537,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10303, guid: 0000000000000000f000000000000000, type: 0}
+  - {fileID: 2100000, guid: 4ea6efed0bf2a0146afdfdb1b8401058, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -571,43 +584,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1040333180
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1040333174}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a79356cac0903ea4cb5f70052fb45638, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SceneTransitionTrigger
-  targetSceneAsset: {fileID: 102900000, guid: 98e8f9d290e4cde46b0bc0557a388708, type: 3}
-  targetSceneName: Transistion-test
-  triggerOnlyOnce: 1
-  designatedObject: {fileID: 849519813}
-  debugLogs: 1
-  includeInventorySnapshot: 1
-  variablesToSend:
-  - key: 
-    valueType: 0
-    intValue: 0
-    floatValue: 0
-    boolValue: 0
-    stringValue: 
-  - key: 
-    valueType: 0
-    intValue: 0
-    floatValue: 0
-    boolValue: 0
-    stringValue: 
-  - key: 
-    valueType: 0
-    intValue: 0
-    floatValue: 0
-    boolValue: 0
-    stringValue: 
 --- !u!1 &1118153757
 GameObject:
   m_ObjectHideFlags: 0
@@ -733,6 +709,12 @@ GameObject:
   - component: {fileID: 1388991693}
   - component: {fileID: 1388991692}
   - component: {fileID: 1388991691}
+  - component: {fileID: 1388991698}
+  - component: {fileID: 1388991697}
+  - component: {fileID: 1388991702}
+  - component: {fileID: 1388991701}
+  - component: {fileID: 1388991700}
+  - component: {fileID: 1388991699}
   m_Layer: 0
   m_Name: Cube (1)
   m_TagString: Untagged
@@ -756,6 +738,7 @@ MonoBehaviour:
   - {fileID: 1808057777}
   - {fileID: 1993869013}
   - {fileID: 827959733}
+  freezeWaypointsOnStart: 1
   moveSpeed: 3
   loop: 1
   pingPong: 0
@@ -785,9 +768,9 @@ Rigidbody:
   m_ImplicitCom: 1
   m_ImplicitTensor: 1
   m_UseGravity: 1
-  m_IsKinematic: 0
+  m_IsKinematic: 1
   m_Interpolate: 0
-  m_Constraints: 0
+  m_Constraints: 4
   m_CollisionDetection: 0
 --- !u!65 &1388991693
 BoxCollider:
@@ -804,7 +787,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -885,6 +868,150 @@ Transform:
   - {fileID: 827959733}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1388991697
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1388991690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26aa80fb35ddd2644991219b124d438a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ExplosionEffect
+  windUpDuration: 0.35
+  burstDuration: 0.4
+  windUpScale: 1.35
+  spinSpeed: 180
+  windUpCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  burstCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  particlesPrefab: {fileID: 0}
+  explosionClip: {fileID: 0}
+  explosionVolume: 0.8
+--- !u!114 &1388991698
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1388991690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a79356cac0903ea4cb5f70052fb45638, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SceneTransitionTrigger
+  targetSceneAsset: {fileID: 102900000, guid: b0ba6d004cc889944bf35ed4a62cd4d4, type: 3}
+  targetSceneName: CurlingRound
+  triggerOnlyOnce: 1
+  designatedObject: {fileID: 849519813}
+  debugLogs: 1
+  transitionEffectSource: {fileID: 1388991701}
+  enemyType: DefaultEnemy
+  mapType: DefaultMap
+--- !u!114 &1388991699
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1388991690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7d4a23d227275ba49b8a884a538fee56, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CampaignMatchNode
+  nodeId: Cube (1)
+  appearanceSource: {fileID: 1388991700}
+--- !u!114 &1388991700
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1388991690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7622a85a3afb8134d9da06d391b77876, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TintedNodeAppearance
+  availableColor: {r: 0.78, g: 0.16, b: 0.18, a: 1}
+  clearedColor: {r: 0.17, g: 0.4, b: 0.78, a: 1}
+--- !u!114 &1388991701
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1388991690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4f6a0a7c8a5e8a144a681926b142655c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TransitionEffectSequence
+  effectSources:
+  - {fileID: 1388991697}
+  - {fileID: 1388991702}
+--- !u!114 &1388991702
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1388991690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b51108f0a3f57ef419808d0ff22d74f1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ScreenFadeEffect
+  duration: 0.5
+  fadeColor: {r: 0, g: 0, b: 0, a: 1}
 --- !u!1 &1536888688
 GameObject:
   m_ObjectHideFlags: 0
@@ -899,6 +1026,12 @@ GameObject:
   - component: {fileID: 1536888690}
   - component: {fileID: 1536888689}
   - component: {fileID: 1536888694}
+  - component: {fileID: 1536888696}
+  - component: {fileID: 1536888695}
+  - component: {fileID: 1536888700}
+  - component: {fileID: 1536888699}
+  - component: {fileID: 1536888698}
+  - component: {fileID: 1536888697}
   m_Layer: 0
   m_Name: Cube (2)
   m_TagString: Untagged
@@ -929,9 +1062,9 @@ Rigidbody:
   m_ImplicitCom: 1
   m_ImplicitTensor: 1
   m_UseGravity: 1
-  m_IsKinematic: 0
+  m_IsKinematic: 1
   m_Interpolate: 0
-  m_Constraints: 0
+  m_Constraints: 4
   m_CollisionDetection: 0
 --- !u!65 &1536888690
 BoxCollider:
@@ -948,7 +1081,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -1048,6 +1181,150 @@ MonoBehaviour:
   arrivalThreshold: 0.05
   centerTransform: {fileID: 0}
   debugDraw: 1
+--- !u!114 &1536888695
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1536888688}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a79356cac0903ea4cb5f70052fb45638, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SceneTransitionTrigger
+  targetSceneAsset: {fileID: 102900000, guid: b0ba6d004cc889944bf35ed4a62cd4d4, type: 3}
+  targetSceneName: CurlingRound
+  triggerOnlyOnce: 1
+  designatedObject: {fileID: 849519813}
+  debugLogs: 1
+  transitionEffectSource: {fileID: 1536888699}
+  enemyType: DefaultEnemy
+  mapType: DefaultMap
+--- !u!114 &1536888696
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1536888688}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26aa80fb35ddd2644991219b124d438a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ExplosionEffect
+  windUpDuration: 0.35
+  burstDuration: 0.4
+  windUpScale: 1.35
+  spinSpeed: 180
+  windUpCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  burstCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  particlesPrefab: {fileID: 0}
+  explosionClip: {fileID: 0}
+  explosionVolume: 0.8
+--- !u!114 &1536888697
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1536888688}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7d4a23d227275ba49b8a884a538fee56, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CampaignMatchNode
+  nodeId: Cube (2)
+  appearanceSource: {fileID: 1536888698}
+--- !u!114 &1536888698
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1536888688}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7622a85a3afb8134d9da06d391b77876, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TintedNodeAppearance
+  availableColor: {r: 0.78, g: 0.16, b: 0.18, a: 1}
+  clearedColor: {r: 0.17, g: 0.4, b: 0.78, a: 1}
+--- !u!114 &1536888699
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1536888688}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4f6a0a7c8a5e8a144a681926b142655c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TransitionEffectSequence
+  effectSources:
+  - {fileID: 1536888696}
+  - {fileID: 1536888700}
+--- !u!114 &1536888700
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1536888688}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b51108f0a3f57ef419808d0ff22d74f1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ScreenFadeEffect
+  duration: 0.5
+  fadeColor: {r: 0, g: 0, b: 0, a: 1}
 --- !u!1 &1808057776
 GameObject:
   m_ObjectHideFlags: 0
