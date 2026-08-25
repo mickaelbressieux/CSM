@@ -11,8 +11,9 @@ GameObject:
   - component: {fileID: 1154912570363139279}
   - component: {fileID: 5416627764038461199}
   - component: {fileID: -2631972106896688628}
-  - component: {fileID: -8112069323040243232}
   - component: {fileID: -1419692476118321109}
+  - component: {fileID: 3809622896377040852}
+  - component: {fileID: 1852087980695562889}
   m_Layer: 0
   m_Name: AIStone
   m_TagString: Untagged
@@ -80,25 +81,7 @@ MonoBehaviour:
   preShotSpinSpeed: 2
   slideDrag: 0.001
   stopThreshold: 0.05
-  shotProviderSource: {fileID: -8112069323040243232}
---- !u!114 &-8112069323040243232
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2236453764051679029}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f7bd2c36964067044b30183d59b8b992, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::FakeAIShotProvider
-  basePower: 40
-  powerJitter: 3
-  baseCurl: 0
-  curlJitter: 0.5
-  thinkDelaySeconds: 1
-  target: {fileID: 0}
+  shotProviderSource: {fileID: 1852087980695562889}
 --- !u!114 &-1419692476118321109
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -112,6 +95,52 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Stone
   Side: 0
+  <Phase>k__BackingField: 0
+--- !u!114 &3809622896377040852
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2236453764051679029}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0229370577c433b47a2261ef54d8ff8e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AIShotTrajectoryPlanner
+  centerTag: Center
+  playerTag: Player
+  obstacleLayerMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  obstacleClearanceMargin: 0.15
+  acceptableTargetDistance: 0.75
+  maximumAngle: 35
+  angleStep: 1
+  maximumCurl: 1.7
+  curlStep: 0.1
+  maximumLateralOffset: 4
+  forceSearchIterations: 20
+  simulationFolder: Logs/simu curl pc
+  waypointCount: 20
+--- !u!114 &1852087980695562889
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2236453764051679029}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9525c4605b2fd0a48a0c5b67dcb46f70, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StrategicAIShotProvider
+  difficulty: 1
+  strategy: 2
+  playerDetectionDistanceFromCenter: 10
+  playerHitPowerMultiplier: 1.1
+  thinkDelaySeconds: 1
+  emergencyPower: 17
 --- !u!1001 &981970467988155812
 PrefabInstance:
   m_ObjectHideFlags: 0
