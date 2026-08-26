@@ -114,6 +114,11 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   obstacleClearanceMargin: 0.15
+  pathSegments: 20
+  estimatedSlidingDeceleration: 6.5
+  minimumForce: 1
+  maximumForce: 150
+  maximumPredictedDistance: 500
   acceptableTargetDistance: 0.75
   maximumAngle: 35
   angleStep: 1
@@ -121,8 +126,6 @@ MonoBehaviour:
   curlStep: 0.1
   maximumLateralOffset: 4
   forceSearchIterations: 20
-  simulationFolder: Logs/simu curl pc
-  waypointCount: 20
 --- !u!114 &1852087980695562889
 MonoBehaviour:
   m_ObjectHideFlags: 0

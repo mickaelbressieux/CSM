@@ -13,11 +13,11 @@ MonoBehaviour:
   m_Name: AI Opponent Profile
   m_EditorClassIdentifier: Assembly-CSharp::AIOpponentProfile
   opponentName: Opponent
-  difficulty: 1
+  difficulty: 3
   defaultStrategy: 2
   strategyByThrow: 
   repeatStrategySequence: 0
   thinkDelaySeconds: 1
   playerDetectionDistanceFromCenter: 10
-  playerHitPowerMultiplier: 1.1
+  playerHitPowerMultiplier: 1.25
   emergencyPower: 17

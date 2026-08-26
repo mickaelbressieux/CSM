@@ -6,7 +6,8 @@ public enum StrategicAIDifficulty
 {
     Easy,
     Intermediate,
-    Hard
+    Hard,
+    Insane
 }
 
 public enum AIStrategyType
@@ -214,6 +215,11 @@ public sealed class StrategicAIShotProvider : MonoBehaviour, IShotProvider, ISho
     private static ShotData ApplyDifficulty(ShotData source,
         StrategicAIDifficulty selectedDifficulty, float maximumCurl, float maximumLateral)
     {
+        // Insane uses the exact trajectory produced by the planner: no random power,
+        // direction, curl or lateral-offset modification is applied.
+        if (selectedDifficulty == StrategicAIDifficulty.Insane)
+            return source;
+
         float powerNoise;
         float angleNoise;
         float curlNoise;
