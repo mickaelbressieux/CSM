@@ -30,6 +30,11 @@ public class PNJMotionRandom : MonoBehaviour
     bool moving = false;
     float waitTimer = 0f;
 
+    void Awake()
+    {
+        SyntyLocomotionAnimator.EnsureFor(gameObject);
+    }
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {

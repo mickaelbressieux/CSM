@@ -2,7 +2,7 @@ using UnityEngine;
 
 public class PNJMotionLinear : MonoBehaviour
 {
-    // Waypoints are read automatically from direct children of this object.
+    [Tooltip("Points de passage a utiliser, dans l'ordre. Glissez uniquement les objets souhaites ici.")]
     [SerializeField] private Transform[] waypoints;
     [SerializeField] private bool freezeWaypointsOnStart = true;
     public float moveSpeed = 3f;
@@ -18,20 +18,14 @@ public class PNJMotionLinear : MonoBehaviour
     int direction = 1; // 1 = forward, -1 = backward (for ping-pong)
     private Vector3[] waypointPositions = System.Array.Empty<Vector3>();
 
-    private void OnValidate()
+    void Awake()
     {
-        RefreshWaypointsFromChildren();
-    }
-
-    private void OnTransformChildrenChanged()
-    {
-        RefreshWaypointsFromChildren();
+        SyntyLocomotionAnimator.EnsureFor(gameObject);
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
-        RefreshWaypointsFromChildren();
         RebuildWaypointPositions();
 
         // Clamp currentIndex
@@ -42,25 +36,6 @@ public class PNJMotionLinear : MonoBehaviour
         // transform.position = waypoints[currentIndex].position;
     }
 
-    private void RefreshWaypointsFromChildren()
-    {
-        int count = transform.childCount;
-        if (count <= 0)
-        {
-            waypoints = System.Array.Empty<Transform>();
-            currentIndex = 0;
-            return;
-        }
-
-        waypoints = new Transform[count];
-        for (int i = 0; i < count; i++)
-        {
-            waypoints[i] = transform.GetChild(i);
-        }
-
-        currentIndex = Mathf.Clamp(currentIndex, 0, waypoints.Length - 1);
-    }
-
     private void RebuildWaypointPositions()
     {
         if (waypoints == null || waypoints.Length == 0)
@@ -69,18 +44,25 @@ public class PNJMotionLinear : MonoBehaviour
             return;
         }
 
-        waypointPositions = new Vector3[waypoints.Length];
+        int validWaypointCount = 0;
+        for (int i = 0; i < waypoints.Length; i++)
+        {
+            if (waypoints[i] != null) validWaypointCount++;
+        }
+
+        waypointPositions = new Vector3[validWaypointCount];
+        int positionIndex = 0;
         for (int i = 0; i < waypoints.Length; i++)
         {
             Transform point = waypoints[i];
-            if (point == null)
-            {
-                waypointPositions[i] = transform.position;
-                continue;
-            }
+            if (point == null) continue;
 
-            waypointPositions[i] = point.position;
+            waypointPositions[positionIndex] = point.position;
+            positionIndex++;
         }
+
+        if (waypointPositions.Length > 0)
+            currentIndex = Mathf.Clamp(currentIndex, 0, waypointPositions.Length - 1);
     }
 
     // Update is called once per frame
@@ -130,10 +112,10 @@ public class PNJMotionLinear : MonoBehaviour
             {
                 if (direction == 1)
                 {
-                    if (currentIndex >= waypoints.Length - 1)
+                    if (currentIndex >= waypointPositions.Length - 1)
                     {
                         direction = -1;
-                        currentIndex += direction;
+                        if (waypointPositions.Length > 1) currentIndex += direction;
                     }
                     else currentIndex += direction;
                 }
@@ -142,7 +124,7 @@ public class PNJMotionLinear : MonoBehaviour
                     if (currentIndex <= 0)
                     {
                         direction = 1;
-                        currentIndex += direction;
+                        if (waypointPositions.Length > 1) currentIndex += direction;
                     }
                     else currentIndex += direction;
                 }
@@ -174,17 +156,24 @@ public class PNJMotionLinear : MonoBehaviour
             return;
         }
 
-        if (transform.childCount > 0)
+        if (waypoints != null && waypoints.Length > 0)
         {
             Gizmos.color = Color.cyan;
-            for (int i = 0; i < transform.childCount; i++)
+            Transform previousPoint = null;
+            Transform firstPoint = null;
+            for (int i = 0; i < waypoints.Length; i++)
             {
-                Transform t = transform.GetChild(i);
+                Transform t = waypoints[i];
                 if (t == null) continue;
+
+                if (firstPoint == null) firstPoint = t;
                 Gizmos.DrawWireSphere(t.position, 0.2f);
-                if (i < transform.childCount - 1) Gizmos.DrawLine(t.position, transform.GetChild(i + 1).position);
-                if (loop && i == transform.childCount - 1 && transform.childCount > 1) Gizmos.DrawLine(t.position, transform.GetChild(0).position);
+                if (previousPoint != null) Gizmos.DrawLine(previousPoint.position, t.position);
+                previousPoint = t;
             }
+
+            if (loop && firstPoint != null && previousPoint != firstPoint)
+                Gizmos.DrawLine(previousPoint.position, firstPoint.position);
         }
     }
 }

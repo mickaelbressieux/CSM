@@ -30,6 +30,11 @@ public class PlayerMotionCampagne : MonoBehaviour
     // If the model's forward is inverted, set this to true to rotate 180° when facing movement
     public bool invertFacing = false;
 
+    void Awake()
+    {
+        SyntyLocomotionAnimator.EnsureFor(gameObject);
+    }
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
