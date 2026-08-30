@@ -1,9 +1,13 @@
 using UnityEngine;
 
 /// <summary>
-/// SAMPLE power (delete when real powers exist). Adds a one-shot forward impulse at launch, so the
-/// stone travels faster. Proves the <see cref="StoneAbility"/> hook works and that powers stack:
-/// put two of these on a stone and both fire, doubling the bonus.
+/// SAMPLE power, kept as the smallest possible reference for authoring one. Adds a one-shot forward
+/// impulse at launch, so the stone travels faster. Proves the <see cref="StoneAbility"/> hook works
+/// and that powers stack: put two of these on a stone and both fire, doubling the bonus.
+///
+/// It aims along <c>launcher.ActiveShot.Direction</c> rather than the Rigidbody's velocity, because
+/// the launch impulse is only integrated by the physics step at the END of the FixedUpdate that
+/// fires this hook — the velocity is still zero here. Real powers should read the shot the same way.
 /// </summary>
 public class ExtraPowerAbility : StoneAbility
 {
@@ -12,8 +16,6 @@ public class ExtraPowerAbility : StoneAbility
 
     public override void OnLaunch(StoneLauncher launcher)
     {
-        Rigidbody rb = launcher.Body;
-        if (rb.linearVelocity.sqrMagnitude > 1e-6f)
-            rb.AddForce(rb.linearVelocity.normalized * bonusImpulse, ForceMode.Impulse);
+        launcher.Body.AddForce(launcher.ActiveShot.Direction * bonusImpulse, ForceMode.Impulse);
     }
 }

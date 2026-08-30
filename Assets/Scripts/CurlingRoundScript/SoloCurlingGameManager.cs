@@ -27,6 +27,12 @@ public class SoloCurlingGameManager : MonoBehaviour
     public GameObject aimArrowPrefab;         // aim-preview PREFAB; instantiated per player stone
     public CurlingUIManager soloCurlingUI;    // the single UI; driven with banner + active shot
 
+    [Header("Special Stones")]
+    // The player's stones and their powers. Optional: leave it empty and every stone is ordinary.
+    // The player's throws consume the list in order (throw 0 -> stone [0], ...); a throw past the
+    // end of the list falls back to a plain stone.
+    public StoneInventory playerStoneInventory;
+
     [Header("Match Mode (temp showcase)")]
     public int stonesPerSide = 3;
 
@@ -82,7 +88,9 @@ public class SoloCurlingGameManager : MonoBehaviour
     {
         StoneLauncher launcher;
         IShotProvider provider;
-        BuildStone(false, out launcher, out provider);
+        // Test-drop always uses the first inventory stone, so a single power can be tried out
+        // without playing a whole match.
+        BuildStone(false, out launcher, out provider, playerStoneInventory?.GetStone(0));
         playerLauncher = launcher;
         if (soloCurlingUI != null)
             soloCurlingUI.SetActiveShot(launcher, provider);
@@ -336,7 +344,12 @@ public class SoloCurlingGameManager : MonoBehaviour
     {
         StoneLauncher launcher;
         IShotProvider provider;
-        GameObject go = BuildStone(isAI, out launcher, out provider);
+        // The player throws their inventory stones in order. playerStones.Count is exactly the
+        // 0-based index of the throw in progress, since a stone is only filed into that list once
+        // it has come to rest. Past the end of the inventory (or with none), the loadout is null
+        // and the stone is ordinary. The AI has no inventory yet.
+        StoneLoadout loadout = isAI ? null : playerStoneInventory?.GetStone(playerStones.Count);
+        GameObject go = BuildStone(isAI, out launcher, out provider, loadout);
         currentStone = go;
         forceEndTurn = false;
 
@@ -402,7 +415,11 @@ public class SoloCurlingGameManager : MonoBehaviour
     // prefab can't bake in - what to aim at, and a per-stone aim-arrow instance - through
     // IShotContextReceiver, so this manager never names a concrete provider type. Used by BOTH
     // modes; the caller decides UI banners. Returns the now-active stone.
-    private GameObject BuildStone(bool isAI, out StoneLauncher launcher, out IShotProvider provider)
+    //
+    // An optional StoneLoadout adds the special powers this stone carries. The manager never names
+    // a concrete ability type either: the loadout's StonePowerDefinition assets do the attaching.
+    private GameObject BuildStone(bool isAI, out StoneLauncher launcher, out IShotProvider provider,
+                                  StoneLoadout loadout = null)
     {
         GameObject prefab = isAI ? aiStonePrefab : playerStonePrefab;
         GameObject go = Instantiate(prefab, stoneStartPoint.position, stoneStartPoint.rotation);
@@ -437,6 +454,10 @@ public class SoloCurlingGameManager : MonoBehaviour
         // Stamp identity so abilities / events / scoring can tell stones apart.
         Stone id = go.GetComponent<Stone>();
         if (id != null) id.Side = isAI ? StoneSide.AI : StoneSide.Player;
+
+        // Bolt on this stone's special powers. Must happen while the object is still inactive, so
+        // the components exist before Stone.Awake caches them and StoneLauncher starts firing hooks.
+        loadout?.ApplyTo(go);
 
         go.SetActive(true); // now Awake/OnEnable run with everything wired
         return go;
@@ -506,7 +527,13 @@ public class SoloCurlingGameManager : MonoBehaviour
             Vector3 p = s.transform.position;
             p.y = 0f;
             if (Vector3.Distance(p, center) < opponentNearest)
-                points++;
+            {
+                // A counting stone is worth one point unless its powers say otherwise (Double
+                // Score, ...). Side-agnostic on purpose: give the AI an inventory later and its
+                // scoring powers work with no change here.
+                Stone id = s.GetComponent<Stone>();
+                points += id != null ? id.ScorePoints() : 1;
+            }
         }
 
         string who = playerWon ? "You" : "AI";
