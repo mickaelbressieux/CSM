@@ -42,6 +42,7 @@ que l'ordre correspondant à son lancer.
 
 - nom de l'adversaire ;
 - difficulté ;
+- nombre de pierres disponibles pendant un match ;
 - stratégie par défaut ;
 - stratégie de chaque lancer ;
 - répétition éventuelle de la séquence ;

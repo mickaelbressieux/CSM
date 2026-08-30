@@ -93,6 +93,14 @@ public sealed class AIOpponentController : MonoBehaviour
         Debug.Log("AI encounter started: " + profile.OpponentName, this);
     }
 
+    public void SetProfile(AIOpponentProfile newProfile, bool restartEncounter = false)
+    {
+        profile = newProfile;
+
+        if (restartEncounter)
+            BeginEncounter();
+    }
+
     /// <summary>Call this when the player leaves the opponent or closes the encounter.</summary>
     public void EndEncounter()
     {

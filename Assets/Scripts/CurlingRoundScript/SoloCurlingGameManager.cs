@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
 
-public class SoloCurlingGameManager : MonoBehaviour
+public class SoloCurlingGameManager : MonoBehaviour, ISceneTransitionDataReceiver
 {
     // TestDrop = the original showcase (drop N enemy stones, player shoots one).
     // Match    = temp turn-based round: AI and player alternate, AI first, 3 stones each.
@@ -66,8 +66,36 @@ public class SoloCurlingGameManager : MonoBehaviour
     private bool resultProcessed = false;
     private int  lastScore       = 0;
 
+    public void ReceiveTransitionData(SceneTransitionData data)
+    {
+        if (data == null)
+            return;
+
+        if (data.TryGetBool(SceneTransitionDataKeys.CurlingMatchMode, out bool useMatchMode))
+            mode = useMatchMode ? GameMode.Match : GameMode.TestDrop;
+
+        if (data.TryGetInt(SceneTransitionDataKeys.CurlingPlayerStoneCount, out int playerStoneCount))
+            stonesPerSide = Mathf.Max(1, playerStoneCount);
+
+        if (data.TryGetObject(SceneTransitionDataKeys.CurlingEnemyProfile, out AIOpponentProfile opponentProfile))
+        {
+            AIOpponentController opponent = AIOpponentController.ActiveOpponent;
+            if (opponent == null)
+                opponent = FindFirstObjectByType<AIOpponentController>();
+
+            if (opponent != null)
+                opponent.SetProfile(opponentProfile, true);
+            else
+                Debug.LogWarning(name + ": no AIOpponentController found for the selected profile.", this);
+        }
+    }
+
     private void Start()
     {
+        // Installe automatiquement le gestionnaire de sortie du match.
+        if (GetComponent<CurlingMatchSceneFlow>() == null)
+            gameObject.AddComponent<CurlingMatchSceneFlow>();
+
         // Both modes spawn their stones from prefabs (tuning lives on the prefab).
         // Drive the shared UI even if it wasn't wired in the inspector.
         if (soloCurlingUI == null) soloCurlingUI = FindFirstObjectByType<CurlingUIManager>();
@@ -308,7 +336,8 @@ public class SoloCurlingGameManager : MonoBehaviour
     }
 
     // ------------------------------------------------------------------
-    // Temp match mode: AI and player alternate throws (AI first), 3 each.
+    // Temp match mode: AI and player alternate throws (AI first).
+    // The player's count comes from stonesPerSide; the AI's comes from its opponent profile.
     // Every stone is spawned at runtime and driven through the SAME
     // StoneLauncher via the IShotProvider seam — that is what this showcases.
     // ------------------------------------------------------------------
@@ -319,20 +348,44 @@ public class SoloCurlingGameManager : MonoBehaviour
         {
             ClearMatchStones();
 
-            int totalThrows = stonesPerSide * 2;
+            int playerStoneCount = Mathf.Max(1, stonesPerSide);
+            AIOpponentProfile opponentProfile = AIOpponentController.ActiveOpponent?.Profile;
+            int aiStoneCount = opponentProfile != null
+                ? opponentProfile.StoneCount
+                : playerStoneCount;
+            int aiThrows = 0;
+            int playerThrows = 0;
+            int totalThrows = aiStoneCount + playerStoneCount;
+
             for (int i = 0; i < totalThrows; i++)
             {
-                bool isAI = (i % 2 == 0); // even turns are the AI's, so the AI starts
-                yield return StartCoroutine(RunTurn(isAI));
+                bool isAI;
+                if (aiThrows >= aiStoneCount)
+                    isAI = false;
+                else if (playerThrows >= playerStoneCount)
+                    isAI = true;
+                else
+                    isAI = i % 2 == 0; // the AI starts while both sides still have stones
+
+                int throwNumber = isAI ? ++aiThrows : ++playerThrows;
+                int sideStoneCount = isAI ? aiStoneCount : playerStoneCount;
+                yield return StartCoroutine(RunTurn(isAI, throwNumber, sideStoneCount));
             }
 
-            string result = ComputeMatchResult();
+            bool playerWon;
+            string result = ComputeMatchResult(out playerWon);
+            if (playerWon)
+            {
+                AIOpponentProfile defeatedOpponent = AIOpponentController.ActiveOpponent?.Profile;
+                CampainManager.Instance?.RegisterOpponentVictory(defeatedOpponent);
+            }
             Debug.Log("Match end. " + result);
             MatchEvents.RaiseEndScored(result);
+            MatchEvents.RaiseMatchCompleted(playerWon, result);
             if (soloCurlingUI != null)
             {
                 soloCurlingUI.SetActiveShot(null, null);
-                soloCurlingUI.SetBanner(result + "\nPress R to play again.");
+                soloCurlingUI.SetBanner(result + "\nReturning to campaign...");
             }
 
             yield return new WaitUntil(() =>
@@ -340,7 +393,7 @@ public class SoloCurlingGameManager : MonoBehaviour
         }
     }
 
-    private IEnumerator RunTurn(bool isAI)
+    private IEnumerator RunTurn(bool isAI, int throwNumber, int sideStoneCount)
     {
         StoneLauncher launcher;
         IShotProvider provider;
@@ -370,8 +423,8 @@ public class SoloCurlingGameManager : MonoBehaviour
             // Player turns show the live aim HUD; AI turns show a banner only.
             soloCurlingUI.SetActiveShot(launcher, isAI ? null : provider);
             soloCurlingUI.SetBanner(isAI
-                ? $"AI is throwing... ({CountThrown(true)}/{stonesPerSide})"
-                : $"Your throw ({CountThrown(false)}/{stonesPerSide}) - arrows aim/power, Q/E curl, A/D offset, Space to shoot");
+                ? $"AI is throwing... ({throwNumber}/{sideStoneCount})"
+                : $"Your throw ({throwNumber}/{sideStoneCount}) - arrows aim/power, Q/E curl, A/D offset, Space to shoot");
         }
 
         // Wait for the shot to be released (or a forced skip)...
@@ -463,8 +516,6 @@ public class SoloCurlingGameManager : MonoBehaviour
         return go;
     }
 
-    private int CountThrown(bool isAI) => (isAI ? aiStones.Count : playerStones.Count) + 1;
-
     private bool AllMatchStonesSettled()
     {
         return StonesSettled(playerStones) && StonesSettled(aiStones);
@@ -505,7 +556,7 @@ public class SoloCurlingGameManager : MonoBehaviour
 
     // Standard curling end scoring: the side with the nearest stone scores one point
     // for every one of its stones closer to the button than the opponent's nearest.
-    private string ComputeMatchResult()
+    private string ComputeMatchResult(out bool playerWon)
     {
         Vector3 center = houseCenter.position;
         center.y = 0f;
@@ -514,9 +565,12 @@ public class SoloCurlingGameManager : MonoBehaviour
         float aiNearest      = NearestDistance(aiStones, center);
 
         if (playerNearest == float.MaxValue && aiNearest == float.MaxValue)
+        {
+            playerWon = false;
             return "No stones in play - draw.";
+        }
 
-        bool playerWon = playerNearest <= aiNearest;
+        playerWon = playerNearest <= aiNearest;
         float opponentNearest = playerWon ? aiNearest : playerNearest;
         List<GameObject> winners = playerWon ? playerStones : aiStones;
 

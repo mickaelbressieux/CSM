@@ -12,6 +12,9 @@ EditorBuildSettings:
     path: Assets/Scenes/CampagneMap.unity
     guid: 2d9268bc78438f744a92982caec126de
   - enabled: 1
+    path: Assets/Scenes/CurlingRound.unity
+    guid: b0ba6d004cc889944bf35ed4a62cd4d4
+  - enabled: 1
     path: Assets/Scenes/Transistion-test.unity
     guid: 98e8f9d290e4cde46b0bc0557a388708
   m_configObjects:
