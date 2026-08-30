@@ -1232,7 +1232,6 @@ MonoBehaviour:
   aiStonePrefab: {fileID: 2236453764051679029, guid: 422de04d21cb39a4ebbb7fd761ce3162, type: 3}
   aimArrowPrefab: {fileID: 7647944660234170661, guid: aca8aa66265b70048ae61cf26fee768d, type: 3}
   soloCurlingUI: {fileID: 2026273924}
-  playerStoneInventory: {fileID: 2042230024}
   stonesPerSide: 3
   forceNextTurnKey: 28
   killY: -2
@@ -1421,60 +1420,6 @@ MonoBehaviour:
   stone: {fileID: 0}
   gameManager: {fileID: 1556265698}
   infoText: {fileID: 39661338}
---- !u!1 &2042230022
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2042230023}
-  - component: {fileID: 2042230024}
-  m_Layer: 0
-  m_Name: StoneInventory
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &2042230023
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2042230022}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 673811803}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2042230024
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2042230022}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7b720b66397b1424b969d0926bea32d2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::StoneInventory
-  stones:
-  - displayName: 
-    powers:
-    - {fileID: 11400000, guid: 9bcf247ccebc3614c8e78c21fa497382, type: 2}
-  - displayName: 
-    powers:
-    - {fileID: 11400000, guid: 8f18a4646ef6ae44ba6f1758d061c44e, type: 2}
-  - displayName: 
-    powers:
-    - {fileID: 11400000, guid: 9d653541797c4654eabd8cf019cd2bda, type: 2}
 --- !u!1 &2060920602
 GameObject:
   m_ObjectHideFlags: 0
