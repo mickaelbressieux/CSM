@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -38,9 +39,13 @@ public class StoneLauncher : MonoBehaviour
     private IShotProvider provider;
 
     // Stackable powers on this stone. Their lifecycle hooks (launch / slide / stop / collision) are
-    // fired below on EVERY StoneAbility present, so multiple powers stack. Cached in OnEnable.
-    private StoneAbility[] abilities = System.Array.Empty<StoneAbility>();
+    // fired below on EVERY StoneAbility present, so multiple powers stack. The Stone entity owns
+    // the list (scoring reads it too); this is only the fallback for a stone with no Stone component.
     private Stone stoneIdentity;
+    private IReadOnlyList<StoneAbility> fallbackAbilities = System.Array.Empty<StoneAbility>();
+
+    private IReadOnlyList<StoneAbility> Abilities =>
+        stoneIdentity != null ? stoneIdentity.Abilities : fallbackAbilities;
 
     /// <summary>The stone's Rigidbody, exposed so abilities can affect the shot in flight.</summary>
     public Rigidbody Body => rb;
@@ -67,6 +72,12 @@ public class StoneLauncher : MonoBehaviour
     public bool HasBeenShot  { get; private set; } = false;
     public bool ShotFinished { get; private set; } = false;
 
+    /// <summary>The shot currently being executed (direction / power / curl / offset), valid from
+    /// the moment it is applied. Exposed so abilities can reason about the throw they are modifying
+    /// — reading <see cref="Body"/>.linearVelocity in OnLaunch would NOT work, because AddForce is
+    /// only integrated by the physics step at the end of this FixedUpdate.</summary>
+    public ShotData ActiveShot { get; private set; }
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -87,8 +98,9 @@ public class StoneLauncher : MonoBehaviour
         if (provider != null)
             provider.ShotReady += OnShotReady;
 
-        abilities = GetComponents<StoneAbility>();
         stoneIdentity = GetComponent<Stone>();
+        if (stoneIdentity == null)
+            fallbackAbilities = GetComponents<StoneAbility>();
     }
 
     private void OnDisable()
@@ -114,6 +126,7 @@ public class StoneLauncher : MonoBehaviour
         {
             shootPending     = false;
             HasBeenShot      = true;
+            ActiveShot       = pendingShot;
             activeCurl       = pendingShot.Curl;
             rb.constraints   = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
             rb.linearDamping = slideDrag;
@@ -127,7 +140,8 @@ public class StoneLauncher : MonoBehaviour
             // Let angular damping decay it naturally; do NOT override each frame.
             rb.angularVelocity = new Vector3(0f, activeCurl * preShotSpinSpeed, 0f);
             stoneIdentity?.SetPhase(StonePhase.Sliding);
-            for (int i = 0; i < abilities.Length; i++) abilities[i].OnLaunch(this);
+            var launched = Abilities;
+            for (int i = 0; i < launched.Count; i++) launched[i].OnLaunch(this);
             return; // skip stop-check this frame; velocity is updated after physics step
         }
 
@@ -155,12 +169,14 @@ public class StoneLauncher : MonoBehaviour
             rb.angularVelocity = Vector3.zero;
             ShotFinished = true;
             stoneIdentity?.SetPhase(StonePhase.Stopped);
-            for (int i = 0; i < abilities.Length; i++) abilities[i].OnStopped(this);
+            var stopped = Abilities;
+            for (int i = 0; i < stopped.Count; i++) stopped[i].OnStopped(this);
             return;
         }
 
         // Still sliding this step: let stacked powers act on the moving stone (brake, boost, ...).
-        for (int i = 0; i < abilities.Length; i++) abilities[i].OnSlideTick(this);
+        var sliding = Abilities;
+        for (int i = 0; i < sliding.Count; i++) sliding[i].OnSlideTick(this);
 
         // Curl: deflect the velocity heading by a small angle each physics step.
         // angleDeg > 0 → stone curves RIGHT relative to its direction of travel.
@@ -183,6 +199,7 @@ public class StoneLauncher : MonoBehaviour
         ShotFinished  = false;
         shootPending  = false;
         activeCurl    = 0f;
+        ActiveShot    = default;
 
         rb.linearVelocity  = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
@@ -199,7 +216,8 @@ public class StoneLauncher : MonoBehaviour
     // Forward physics collisions to stacked powers (e.g. a "boost on hit" ability).
     private void OnCollisionEnter(Collision collision)
     {
-        for (int i = 0; i < abilities.Length; i++)
-            abilities[i].OnStoneCollision(this, collision);
+        var hit = Abilities;
+        for (int i = 0; i < hit.Count; i++)
+            hit[i].OnStoneCollision(this, collision);
     }
 }

@@ -63,6 +63,11 @@ ExportedObj/
 # Unity3D generated file on crash reports
 sysinfo.txt
 
+# Crash-recovery scenes Unity drops in Assets/_Recovery after an unclean shutdown.
+# Local salvage material, not project content - each crash adds another "0 (n).unity".
+/[Aa]ssets/_[Rr]ecovery/
+/[Aa]ssets/_[Rr]ecovery.meta
+
 # Mono auto generated files
 mono_crash.*
 
