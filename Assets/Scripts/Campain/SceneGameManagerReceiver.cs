@@ -86,6 +86,7 @@ public class SceneGameManagerReceiver : MonoBehaviour, ISceneTransitionDataRecei
         y = DrawSection("Floats", LastReceivedData.FloatValues, y, contentRect.width);
         y = DrawSection("Booleans", LastReceivedData.BoolValues, y, contentRect.width);
         y = DrawSection("Strings", LastReceivedData.StringValues, y, contentRect.width);
+        y = DrawSection("Objects", LastReceivedData.ObjectValues, y, contentRect.width);
 
         y = DrawLine("Inventory", y, contentRect.width);
         if (LastReceivedData.InventorySnapshot == null || LastReceivedData.InventorySnapshot.Count == 0)
@@ -135,6 +136,7 @@ public class SceneGameManagerReceiver : MonoBehaviour, ISceneTransitionDataRecei
         lineCount += 1 + Mathf.Max(1, data.FloatValues.Count);
         lineCount += 1 + Mathf.Max(1, data.BoolValues.Count);
         lineCount += 1 + Mathf.Max(1, data.StringValues.Count);
+        lineCount += 1 + Mathf.Max(1, data.ObjectValues.Count);
 
         int inventoryCount = data.InventorySnapshot == null ? 0 : data.InventorySnapshot.Count;
         lineCount += 1 + Mathf.Max(1, inventoryCount);

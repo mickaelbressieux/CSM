@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d0353a89b1f911e48b9e16bdc9f2e058, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  version: 7
+  version: 10
 --- !u!114 &-516680808615897579
 MonoBehaviour:
   m_ObjectHideFlags: 11
@@ -41,12 +41,13 @@ Material:
   m_InvalidKeywords:
   - _ALPHAPREMULTIPLY_ON
   - _EMISSION
-  m_LightmapFlags: 1
+  m_LightmapFlags: 3
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
   m_CustomRenderQueue: -1
   stringTagMap: {}
-  disabledShaderPasses: []
+  disabledShaderPasses:
+  - MOTIONVECTORS
   m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
@@ -78,7 +79,7 @@ Material:
     m_Ints: []
     m_Floats:
     - _Alpha_Clip_Threshold: 0.5
-    - _BUILTIN_QueueControl: -1
+    - _BUILTIN_QueueControl: 0
     - _BUILTIN_QueueOffset: 0
     - _BumpScale: 1
     - _Cutoff: 0.5
@@ -109,3 +110,4 @@ Material:
     - _SpecColor: {r: 0.44966292, g: 0.43809476, b: 0.53676474, a: 1}
     - _Specular_Color: {r: 0.44966286, g: 0.43809474, b: 0.53676474, a: 1}
   m_BuildTextureStacks: []
+  m_AllowLocking: 1

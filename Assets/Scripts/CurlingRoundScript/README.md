@@ -203,8 +203,9 @@ the pre-placed scene `stone` is disabled and never launched.
   `playerLauncher`) and `SpawnEnemyStones` drops `enemyStoneCount` plain obstacle stones from
   `enemyStonePrefab`; `ComputeScore()` gives +1 if the player is closest, else −1 per closer
   enemy. **R** resets.
-- **Match** (temp turn-based round): `RunMatch()` loops → `RunTurn(isAI)` per throw (`i % 2 == 0`
-  is the AI, so the **AI throws first**), `stonesPerSide * 2` throws total → `ComputeMatchResult()`
+- **Match** (temp turn-based round): `RunMatch()` loops → `RunTurn(isAI, throwNumber, sideStoneCount)`
+  per throw, with the **AI throwing first**. The player uses `stonesPerSide` stones and the AI
+  uses the `stoneCount` configured in its `AIOpponentProfile` → `ComputeMatchResult()`
   (standard curling end scoring, excluding stones that fell off the sheet) → banner → **R** to
   replay. Recovery: **N** (`forceNextTurnKey`) force-skips a stuck turn; `FixedUpdate` freezes
   stones that fall below `killY` and snaps slow creepers to a stop. `DestroyStoneAndArrow` cleans
@@ -234,8 +235,10 @@ configurable `playerTag` to its GameObject in both edit and play mode (via `OnVa
 
 ## How a turn plays out (Match mode)
 
-1. `RunMatch()` clears the sheet and loops `stonesPerSide * 2` turns.
-2. `RunTurn(isAI)` calls `BuildStone`, which instantiates the provider-carrying prefab, reads its
+1. `RunMatch()` clears the sheet and alternates turns until both sides have used their configured
+   number of stones.
+2. `RunTurn(isAI, throwNumber, sideStoneCount)` calls `BuildStone`, which instantiates the
+   provider-carrying prefab, reads its
    `StoneLauncher` + `IShotProvider`, and injects the `ShotContext` — everything wired *before*
    the object is activated.
 3. It waits until `launcher.HasBeenShot` (the provider raised `ShotReady`) — or a forced skip.

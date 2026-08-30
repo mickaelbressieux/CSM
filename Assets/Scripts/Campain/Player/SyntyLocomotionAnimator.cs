@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 /// <summary>
 /// Pilote le contrôleur Synty Base Locomotion à partir du déplacement réel
@@ -36,6 +37,7 @@ public class SyntyLocomotionAnimator : MonoBehaviour
     [Header("Références")]
     [Tooltip("Animator du personnage. S'il est vide, le premier Animator trouvé dans les enfants sera utilisé.")]
     [SerializeField] Animator characterAnimator;
+    readonly List<Animator> characterAnimators = new List<Animator>();
 
     [Header("Déplacement")]
     [Tooltip("Transform dont le déplacement doit être mesuré. S'il est vide, ce sera celui de ce composant.")]
@@ -84,8 +86,11 @@ public class SyntyLocomotionAnimator : MonoBehaviour
     {
         ResolveReferences();
 
-        if (characterAnimator != null && disableAnimatorRootMotion)
-            characterAnimator.applyRootMotion = false;
+        if (disableAnimatorRootMotion)
+        {
+            for (int i = 0; i < characterAnimators.Count; i++)
+                characterAnimators[i].applyRootMotion = false;
+        }
     }
 
     void OnEnable()
@@ -142,22 +147,27 @@ public class SyntyLocomotionAnimator : MonoBehaviour
         if (motionSource == null)
             motionSource = transform;
 
-        if (characterAnimator == null)
-        {
-            Animator[] animators = GetComponentsInChildren<Animator>(true);
-            for (int i = 0; i < animators.Length; i++)
-            {
-                if (animators[i].runtimeAnimatorController == null) continue;
+        characterAnimators.Clear();
 
-                characterAnimator = animators[i];
-                break;
-            }
+        if (characterAnimator != null && characterAnimator.runtimeAnimatorController != null)
+            characterAnimators.Add(characterAnimator);
+
+        Animator[] animators = GetComponentsInChildren<Animator>(true);
+        for (int i = 0; i < animators.Length; i++)
+        {
+            Animator animator = animators[i];
+            if (animator.runtimeAnimatorController == null || characterAnimators.Contains(animator))
+                continue;
+
+            characterAnimators.Add(animator);
         }
+
+        characterAnimator = characterAnimators.Count > 0 ? characterAnimators[0] : null;
     }
 
     void UpdateAnimator(float currentSpeed)
     {
-        if (characterAnimator == null || characterAnimator.runtimeAnimatorController == null)
+        if (characterAnimators.Count == 0)
             return;
 
         bool isMoving = currentSpeed > movementThreshold;
@@ -178,15 +188,22 @@ public class SyntyLocomotionAnimator : MonoBehaviour
         if (isMoving)
             currentGait = currentSpeed < runThreshold ? 1 : currentSpeed < sprintThreshold ? 2 : 3;
 
-        characterAnimator.SetFloat(MoveSpeedHash, currentSpeed);
-        characterAnimator.SetInteger(CurrentGaitHash, currentGait);
-        characterAnimator.SetBool(MovementInputTappedHash, movementTapped);
-        characterAnimator.SetBool(MovementInputPressedHash, movementPressed);
-        characterAnimator.SetBool(MovementInputHeldHash, movementHeld);
-        characterAnimator.SetBool(IsStoppedHash, !isMoving);
-        characterAnimator.SetBool(IsStartingHash, movementTapped || movementPressed);
-        characterAnimator.SetBool(IsWalkingHash, currentGait == 1);
-        characterAnimator.SetBool(IsGroundedHash, assumeGrounded || isGrounded);
+        for (int i = 0; i < characterAnimators.Count; i++)
+        {
+            Animator animator = characterAnimators[i];
+            if (animator == null || animator.runtimeAnimatorController == null)
+                continue;
+
+            animator.SetFloat(MoveSpeedHash, currentSpeed);
+            animator.SetInteger(CurrentGaitHash, currentGait);
+            animator.SetBool(MovementInputTappedHash, movementTapped);
+            animator.SetBool(MovementInputPressedHash, movementPressed);
+            animator.SetBool(MovementInputHeldHash, movementHeld);
+            animator.SetBool(IsStoppedHash, !isMoving);
+            animator.SetBool(IsStartingHash, movementTapped || movementPressed);
+            animator.SetBool(IsWalkingHash, currentGait == 1);
+            animator.SetBool(IsGroundedHash, assumeGrounded || isGrounded);
+        }
 
         wasMoving = isMoving;
     }

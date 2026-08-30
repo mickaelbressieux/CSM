@@ -19,17 +19,21 @@ public static class MatchEvents
     public static event Action<Stone> StoneStopped;
     public static event Action<Stone> StoneLost;
     public static event Action<string> EndScored;
+    public static event Action<bool, string> MatchCompleted;
 
     public static void RaiseTurnStarted(Stone s)   => TurnStarted?.Invoke(s);
     public static void RaiseStoneReleased(Stone s) => StoneReleased?.Invoke(s);
     public static void RaiseStoneStopped(Stone s)  => StoneStopped?.Invoke(s);
     public static void RaiseStoneLost(Stone s)     => StoneLost?.Invoke(s);
     public static void RaiseEndScored(string result) => EndScored?.Invoke(result);
+    public static void RaiseMatchCompleted(bool playerWon, string result) =>
+        MatchCompleted?.Invoke(playerWon, result);
 
     [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void Reset()
     {
         TurnStarted = StoneReleased = StoneStopped = StoneLost = null;
         EndScored = null;
+        MatchCompleted = null;
     }
 }

@@ -23,21 +23,67 @@ public class CampainManager : MonoBehaviour
     [SerializeField] private bool persistBetweenScenes = true;
 
     [Header("Personnage - Inventaire")]
-    [SerializeField] private List<InventoryEntry> startingInventory = new List<InventoryEntry>();
+    [SerializeField] private List<InventoryEntry> startingInventory = new List<InventoryEntry>
+    {
+        new InventoryEntry { itemId = "Pierre", quantity = 3 }
+    };
 
     [Header("Personnage - Competences")]
     [SerializeField] private List<SkillEntry> startingSkills = new List<SkillEntry>();
 
     private readonly Dictionary<string, int> characterInventory = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> characterSkills = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> defeatedOpponentIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private readonly List<GameObject> pausedSceneRoots = new List<GameObject>();
+
+    private string pausedSceneName;
 
     public static CampainManager Instance { get; private set; }
 
     public event Action<string, int> OnInventoryChanged;
     public event Action<string, int> OnSkillChanged;
     public event Action<string> OnSceneLoadRequested;
+    public event Action OnProgressionChanged;
 
     public SceneTransitionData LastTransitionData { get; private set; }
+    public bool HasPausedScene => !string.IsNullOrWhiteSpace(pausedSceneName);
+
+    public bool RegisterOpponentVictory(AIOpponentProfile opponent)
+    {
+        if (opponent == null || string.IsNullOrWhiteSpace(opponent.ProgressionId))
+            return false;
+
+        if (!defeatedOpponentIds.Add(opponent.ProgressionId))
+            return false;
+
+        Debug.Log($"CampainManager: victoire enregistree contre '{opponent.OpponentName}' ({opponent.ProgressionId}).");
+        OnProgressionChanged?.Invoke();
+        return true;
+    }
+
+    public bool IsOpponentDefeated(AIOpponentProfile opponent)
+    {
+        return opponent != null && defeatedOpponentIds.Contains(opponent.ProgressionId);
+    }
+
+    public bool AreOpponentsDefeated(IReadOnlyList<AIOpponentProfile> opponents)
+    {
+        if (opponents == null || opponents.Count == 0)
+            return false;
+
+        for (int i = 0; i < opponents.Count; i++)
+        {
+            if (!IsOpponentDefeated(opponents[i]))
+                return false;
+        }
+
+        return true;
+    }
+
+    public IReadOnlyCollection<string> GetDefeatedOpponentIds()
+    {
+        return defeatedOpponentIds;
+    }
 
     private void Awake()
     {
@@ -279,6 +325,114 @@ public class CampainManager : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// Conserve la scene courante en memoire, desactive ses objets racines, puis
+    /// charge la scene cible par-dessus. Les positions et etats ne sont pas recrees.
+    /// </summary>
+    public bool LoadSceneWithPausedSource(string sceneName, SceneTransitionData transitionData)
+    {
+        if (string.IsNullOrWhiteSpace(sceneName))
+        {
+            Debug.LogWarning("CampainManager: sceneName est vide.");
+            return false;
+        }
+
+        if (!Application.CanStreamedLevelBeLoaded(sceneName))
+        {
+            Debug.LogWarning($"CampainManager: la scene '{sceneName}' n'est pas dans le Build Profile actif (ou Shared Scene List).");
+            return false;
+        }
+
+        if (HasPausedScene)
+        {
+            Debug.LogWarning($"CampainManager: la scene '{pausedSceneName}' est deja en pause.");
+            return false;
+        }
+
+        Scene sourceScene = SceneManager.GetActiveScene();
+        pausedSceneName = sourceScene.name;
+        pausedSceneRoots.Clear();
+
+        foreach (GameObject root in sourceScene.GetRootGameObjects())
+        {
+            if (!root.activeSelf)
+                continue;
+
+            pausedSceneRoots.Add(root);
+            root.SetActive(false);
+        }
+
+        if (transitionData != null)
+        {
+            transitionData.SetSceneNames(pausedSceneName, sceneName);
+            transitionData.SetString(SceneTransitionDataKeys.MatchReturnScene, pausedSceneName);
+            LastTransitionData = transitionData;
+        }
+        else
+        {
+            LastTransitionData = null;
+        }
+
+        OnSceneLoadRequested?.Invoke(sceneName);
+        SceneManager.LoadScene(sceneName, LoadSceneMode.Additive);
+        return true;
+    }
+
+    /// <summary>Victoire : detruit seulement le match et reprend la scene mise en pause.</summary>
+    public bool ResumePausedScene()
+    {
+        if (!TryGetPausedScene(out Scene pausedScene))
+            return false;
+
+        Scene overlayScene = SceneManager.GetActiveScene();
+        SceneManager.SetActiveScene(pausedScene);
+
+        foreach (GameObject root in pausedSceneRoots)
+            if (root != null)
+                root.SetActive(true);
+
+        ClearPausedSceneState();
+        LastTransitionData = null;
+
+        if (overlayScene.IsValid() && overlayScene.isLoaded && overlayScene != pausedScene)
+            SceneManager.UnloadSceneAsync(overlayScene);
+
+        return true;
+    }
+
+    /// <summary>Defaite : abandonne les scenes en memoire et recharge la campagne a neuf.</summary>
+    public bool ResetPausedScene()
+    {
+        if (!TryGetPausedScene(out Scene pausedScene))
+            return false;
+
+        string sceneToReset = pausedScene.name;
+        ClearPausedSceneState();
+        LastTransitionData = null;
+        OnSceneLoadRequested?.Invoke(sceneToReset);
+        SceneManager.LoadScene(sceneToReset, LoadSceneMode.Single);
+        return true;
+    }
+
+    private bool TryGetPausedScene(out Scene scene)
+    {
+        scene = string.IsNullOrWhiteSpace(pausedSceneName)
+            ? default
+            : SceneManager.GetSceneByName(pausedSceneName);
+
+        if (scene.IsValid() && scene.isLoaded)
+            return true;
+
+        Debug.LogWarning("CampainManager: aucune scene en pause n'est disponible.");
+        return false;
+    }
+
+    private void ClearPausedSceneState()
+    {
+        pausedSceneRoots.Clear();
+        pausedSceneName = null;
+    }
+
     public bool LoadSceneAtListIndex(int index)
     {
         if (index < 0 || index >= SceneManager.sceneCountInBuildSettings)
@@ -317,6 +471,9 @@ public class CampainManager : MonoBehaviour
 
     private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        if (mode == LoadSceneMode.Additive && HasPausedScene)
+            SceneManager.SetActiveScene(scene);
+
         if (LastTransitionData == null)
         {
             return;
@@ -331,7 +488,8 @@ public class CampainManager : MonoBehaviour
         MonoBehaviour[] allBehaviours = FindObjectsOfType<MonoBehaviour>(true);
         foreach (MonoBehaviour behaviour in allBehaviours)
         {
-            if (behaviour is ISceneTransitionDataReceiver receiver)
+            if (behaviour != null && behaviour.gameObject.scene == scene
+                && behaviour is ISceneTransitionDataReceiver receiver)
             {
                 receiver.ReceiveTransitionData(LastTransitionData);
             }
