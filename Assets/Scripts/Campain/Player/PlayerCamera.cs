@@ -37,6 +37,27 @@ public class PlayerCamera : MonoBehaviour
         controlsEnabled = enabled;
     }
 
+    /// <summary>
+    /// Remplace les limites de deplacement puis replace immediatement la camera dans la nouvelle
+    /// zone. Le decalage manuel est recalcule pour que le panoramique reste reactif si la zone
+    /// vient d'etre reduite.
+    /// </summary>
+    public void SetPositionLimits(float newMinX, float newMaxX, float newMinZ, float newMaxZ)
+    {
+        minX = Mathf.Min(newMinX, newMaxX);
+        maxX = Mathf.Max(newMinX, newMaxX);
+        minZ = Mathf.Min(newMinZ, newMaxZ);
+        maxZ = Mathf.Max(newMinZ, newMaxZ);
+
+        Vector3 clampedPosition = transform.position;
+        clampedPosition.x = Mathf.Clamp(clampedPosition.x, minX, maxX);
+        clampedPosition.z = Mathf.Clamp(clampedPosition.z, minZ, maxZ);
+        transform.position = clampedPosition;
+
+        if (followedObject != null && followOffsetInitialized)
+            manualPanOffset = clampedPosition - followedObject.position - followOffset;
+    }
+
     void Awake()
     {
         fixedRotation = transform.rotation;

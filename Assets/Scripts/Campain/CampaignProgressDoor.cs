@@ -19,9 +19,20 @@ public class CampaignProgressDoor : MonoBehaviour
     [Tooltip("La porte s'ouvre lorsque tous ces profils ont ete vaincus.")]
     [SerializeField] List<AIOpponentProfile> requiredOpponents = new List<AIOpponentProfile>();
 
+    [Header("Limites de la camera apres ouverture")]
+    [Tooltip("Modifie aussi la zone dans laquelle la camera peut se deplacer lorsque la porte s'ouvre.")]
+    [SerializeField] bool changeCameraPositionLimits;
+    [Tooltip("Camera concernee. Si elle est vide, la PlayerCamera active est recherchee automatiquement.")]
+    [SerializeField] PlayerCamera playerCamera;
+    [SerializeField] float cameraMinX = -50f;
+    [SerializeField] float cameraMaxX = 50f;
+    [SerializeField] float cameraMinZ = -50f;
+    [SerializeField] float cameraMaxZ = 50f;
+
     Quaternion leftClosedRotation;
     Quaternion rightClosedRotation;
     bool openingRequested;
+    bool cameraLimitsApplied;
     bool subscribed;
 
     void Awake()
@@ -54,6 +65,8 @@ public class CampaignProgressDoor : MonoBehaviour
         if (!openingRequested)
             return;
 
+        ApplyCameraPositionLimits();
+
         float step = openingSpeed * Time.deltaTime;
 
         if (leftDoor != null)
@@ -83,6 +96,23 @@ public class CampaignProgressDoor : MonoBehaviour
     {
         CampainManager manager = CampainManager.Instance;
         openingRequested = manager != null && manager.AreOpponentsDefeated(requiredOpponents);
+
+        if (openingRequested)
+            ApplyCameraPositionLimits();
+    }
+
+    void ApplyCameraPositionLimits()
+    {
+        if (!changeCameraPositionLimits || cameraLimitsApplied)
+            return;
+
+        if (playerCamera == null)
+            playerCamera = FindFirstObjectByType<PlayerCamera>();
+        if (playerCamera == null)
+            return;
+
+        playerCamera.SetPositionLimits(cameraMinX, cameraMaxX, cameraMinZ, cameraMaxZ);
+        cameraLimitsApplied = true;
     }
 
     void OnDisable()
@@ -92,5 +122,15 @@ public class CampaignProgressDoor : MonoBehaviour
             manager.OnProgressionChanged -= EvaluateRequirements;
 
         subscribed = false;
+    }
+
+    void OnValidate()
+    {
+        openingSpeed = Mathf.Max(0f, openingSpeed);
+
+        if (cameraMinX > cameraMaxX)
+            (cameraMinX, cameraMaxX) = (cameraMaxX, cameraMinX);
+        if (cameraMinZ > cameraMaxZ)
+            (cameraMinZ, cameraMaxZ) = (cameraMaxZ, cameraMinZ);
     }
 }

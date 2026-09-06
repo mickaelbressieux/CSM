@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8ce3f7e1cc2d4d9bb4fc2616d66bf992, type: 3}
+  m_Name: AI Opponent Thai
+  m_EditorClassIdentifier: Assembly-CSharp::AIOpponentProfile
+  opponentName: Opponent
+  progressionId: 
+  difficulty: 1
+  stoneCount: 3
+  defaultStrategy: 1
+  strategyByThrow: 
+  repeatStrategySequence: 0
+  thinkDelaySeconds: 1
+  playerDetectionDistanceFromCenter: 10
+  playerHitPowerMultiplier: 1.1
+  emergencyPower: 17

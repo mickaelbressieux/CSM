@@ -15,6 +15,8 @@ public class DialogueTrigger : MonoBehaviour
     [SerializeField] string speakerName = "PNJ";
     [TextArea(2, 5)]
     [SerializeField] string[] lines;
+    [Tooltip("Image affichee dans l'emplacement Portrait du Canvas pendant cette discussion.")]
+    [SerializeField] Sprite portrait;
     [SerializeField] bool startAutomatically;
     [Tooltip("A la fin des textes, demande et sauvegarde le nom du pays du joueur.")]
     [SerializeField] bool saveCountryName;
@@ -76,10 +78,15 @@ public class DialogueTrigger : MonoBehaviour
             return;
 
         bool dialogueStarted = dialogueController.StartDialogue(
-            speakerName,
-            lines,
+            new DialogueRequest
+            {
+                speakerName = speakerName,
+                lines = lines,
+                portrait = portrait,
+                saveCountryName = saveCountryName
+            },
             nearbyPlayer,
-            saveCountryName);
+            null);
 
         if (!dialogueStarted || !startAutomatically)
             return;

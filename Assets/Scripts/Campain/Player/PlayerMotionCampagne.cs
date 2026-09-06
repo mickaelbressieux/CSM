@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.AI;
 using System.Collections.Generic;
 #if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
 using UnityEngine.InputSystem;
@@ -17,6 +18,16 @@ public class PlayerMotionCampagne : MonoBehaviour
     // Distance to consider we've reached the destination
     public float stoppingDistance = 0.1f;
 
+    [Header("Navigation")]
+    [Tooltip("Couches utilisees pour construire le NavMesh de secours. Elles doivent contenir le sol et les colliders des batiments.")]
+    [SerializeField] LayerMask navigationSourceLayers = ~0;
+    [Tooltip("Marge autour de toute la formation pour eviter de frotter contre les murs.")]
+    [Min(0.05f)] [SerializeField] float navigationRadius = 1.25f;
+    [Min(0.1f)] [SerializeField] float navigationHeight = 2f;
+    [Tooltip("Distance maximale utilisee pour ramener un clic sur une zone navigable proche.")]
+    [Min(0.1f)] [SerializeField] float clickProjectionRadius = 3f;
+    [Min(0f)] [SerializeField] float acceleration = 30f;
+
     // Layer mask to use for ground raycasts (set to the ground layer in the Inspector)
     public LayerMask groundLayer = ~0; // default: everything
     // Debug draw the target
@@ -25,6 +36,7 @@ public class PlayerMotionCampagne : MonoBehaviour
     // Internal state
     Vector3 targetPosition;
     bool moving = false;
+    NavMeshAgent navigationAgent;
 
     // Min and max bounds for the XZ plane movement
     public float minX = -50f;
@@ -40,12 +52,17 @@ public class PlayerMotionCampagne : MonoBehaviour
     [Header("Retour de la formation")]
     [Tooltip("Vitesse a laquelle les enfants reviennent a leur position locale initiale apres un appui sur Espace.")]
     [Min(0f)] public float formationReturnSpeed = 5f;
+    [Tooltip("Distance de projection sur le NavMesh pour le retour individuel des membres de la formation.")]
+    [Min(0.1f)] [SerializeField] float formationPathProjectionRadius = 0.75f;
 
-    struct ChildInitialPose
+    sealed class ChildInitialPose
     {
         public Transform child;
         public Vector3 localPosition;
         public Quaternion localRotation;
+        public NavMeshPath returnPath;
+        public int returnCornerIndex;
+        public float nextPathRetryTime;
     }
 
     readonly List<ChildInitialPose> initialChildPoses = new List<ChildInitialPose>();
@@ -60,14 +77,13 @@ public class PlayerMotionCampagne : MonoBehaviour
         if (playerRoot == null)
             playerRoot = transform.parent != null ? transform.parent : transform;
 
-        SyntyLocomotionAnimator.EnsureFor(playerRoot.gameObject);
         CaptureInitialChildPoses();
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
-        
+        InitializeNavigation();
     }
 
     // Update is called once per frame
@@ -98,23 +114,6 @@ public class PlayerMotionCampagne : MonoBehaviour
         if (keyboard != null && keyboard.spaceKey.wasPressedThisFrame)
             StartFormationReset();
 
-        if (moving)
-        {
-            // Ensure target stays on the same Y as the object so movement is constrained to XZ plane
-            targetPosition.y = PlayerRoot.position.y;
-
-            // Compute horizontal direction. The shared root is never rotated because
-            // doing so would make offset children travel along an arc.
-            Vector3 dir = targetPosition - PlayerRoot.position;
-            dir.y = 0f;
-            RotateFacingObjects(dir);
-
-            PlayerRoot.position = Vector3.MoveTowards(PlayerRoot.position, targetPosition, moveSpeed * Time.deltaTime);
-            if (Vector3.Distance(PlayerRoot.position, targetPosition) <= stoppingDistance)
-            {
-                moving = false;
-            }
-        }
 #else
         // Legacy Input Manager
         if (Input.GetMouseButtonDown(1)) // 1 = right mouse button
@@ -136,25 +135,9 @@ public class PlayerMotionCampagne : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Space))
             StartFormationReset();
 
-        if (moving)
-        {
-            // Ensure target stays on the same Y as the object so movement is constrained to XZ plane
-            targetPosition.y = PlayerRoot.position.y;
-
-            // Compute horizontal direction. The shared root is never rotated because
-            // doing so would make offset children travel along an arc.
-            Vector3 dir = targetPosition - PlayerRoot.position;
-            dir.y = 0f;
-            RotateFacingObjects(dir);
-
-            PlayerRoot.position = Vector3.MoveTowards(PlayerRoot.position, targetPosition, moveSpeed * Time.deltaTime);
-            if (Vector3.Distance(PlayerRoot.position, targetPosition) <= stoppingDistance)
-            {
-                moving = false;
-            }
-        }
 #endif
 
+        UpdateNavigationMovement();
         UpdateFormationReset();
     }
 
@@ -166,6 +149,11 @@ public class PlayerMotionCampagne : MonoBehaviour
         {
             moving = false;
             resettingFormation = false;
+            StopNavigation();
+        }
+        else if (navigationAgent != null && navigationAgent.isOnNavMesh)
+        {
+            navigationAgent.isStopped = false;
         }
     }
 
@@ -179,6 +167,10 @@ public class PlayerMotionCampagne : MonoBehaviour
             if (IsCameraChild(child))
                 continue;
 
+            // Chaque personnage mesure son propre mouvement. Le pilote place sur la racine
+            // commune ne voyait pas le retour individuel et les laissait glisser en idle.
+            SyntyLocomotionAnimator.EnsureFor(child.gameObject);
+
             initialChildPoses.Add(new ChildInitialPose
             {
                 child = child,
@@ -191,7 +183,11 @@ public class PlayerMotionCampagne : MonoBehaviour
     void StartFormationReset()
     {
         moving = false;
+        StopNavigation();
         resettingFormation = true;
+
+        for (int i = 0; i < initialChildPoses.Count; i++)
+            PrepareChildReturnPath(initialChildPoses[i]);
     }
 
     void UpdateFormationReset()
@@ -209,13 +205,15 @@ public class PlayerMotionCampagne : MonoBehaviour
             if (pose.child == null)
                 continue;
 
-            Vector3 localReturnDirection = pose.localPosition - pose.child.localPosition;
-            bool childIsReturning = localReturnDirection.sqrMagnitude > 0.000001f;
+            Vector3 desiredWorldPosition = PlayerRoot.TransformPoint(pose.localPosition);
+            bool childIsReturning = Vector3.Distance(pose.child.position, desiredWorldPosition) > 0.001f;
 
             if (childIsReturning)
             {
-                Vector3 worldReturnDirection = PlayerRoot.TransformDirection(localReturnDirection);
-                worldReturnDirection.y = 0f;
+                if (pose.returnPath == null && Time.time >= pose.nextPathRetryTime)
+                    PrepareChildReturnPath(pose);
+
+                Vector3 worldReturnDirection = MoveChildAlongReturnPath(pose, positionStep);
 
                 if (worldReturnDirection.sqrMagnitude > 0.0001f)
                 {
@@ -227,15 +225,11 @@ public class PlayerMotionCampagne : MonoBehaviour
                 }
             }
 
-            pose.child.localPosition = Vector3.MoveTowards(
-                pose.child.localPosition,
-                pose.localPosition,
-                positionStep);
-
             // Chaque enfant retrouve son orientation locale initiale une fois
             // revenu a sa place vis-a-vis du parent.
             if (!childIsReturning)
             {
+                pose.child.localPosition = pose.localPosition;
                 pose.child.localRotation = Quaternion.RotateTowards(
                     pose.child.localRotation,
                     pose.localRotation,
@@ -250,6 +244,61 @@ public class PlayerMotionCampagne : MonoBehaviour
         }
 
         resettingFormation = !resetComplete;
+    }
+
+    void PrepareChildReturnPath(ChildInitialPose pose)
+    {
+        if (pose == null || pose.child == null)
+            return;
+
+        Vector3 destination = PlayerRoot.TransformPoint(pose.localPosition);
+        if (CampaignNavMeshRuntime.TryCalculateCompletePath(
+                pose.child.position,
+                destination,
+                formationPathProjectionRadius,
+                NavMesh.AllAreas,
+                out NavMeshPath path,
+                out _))
+        {
+            pose.returnPath = path;
+            pose.returnCornerIndex = path.corners.Length > 1 ? 1 : 0;
+            return;
+        }
+
+        pose.returnPath = null;
+        pose.returnCornerIndex = 0;
+        pose.nextPathRetryTime = Time.time + 0.5f;
+        if (debugDrawTarget)
+            Debug.LogWarning($"PlayerMotionCampagne: aucun chemin accessible pour remettre '{pose.child.name}' en formation.", pose.child);
+    }
+
+    Vector3 MoveChildAlongReturnPath(ChildInitialPose pose, float positionStep)
+    {
+        if (pose.returnPath == null || pose.returnPath.corners.Length == 0)
+            return Vector3.zero;
+
+        Vector3[] corners = pose.returnPath.corners;
+        while (pose.returnCornerIndex < corners.Length - 1 &&
+               Vector3.Distance(pose.child.position, corners[pose.returnCornerIndex]) <= 0.05f)
+        {
+            pose.returnCornerIndex++;
+        }
+
+        Vector3 waypoint = corners[Mathf.Clamp(pose.returnCornerIndex, 0, corners.Length - 1)];
+        Vector3 direction = waypoint - pose.child.position;
+        direction.y = 0f;
+        pose.child.position = Vector3.MoveTowards(pose.child.position, waypoint, positionStep);
+
+        if (pose.returnCornerIndex >= corners.Length - 1 &&
+            Vector3.Distance(pose.child.position, waypoint) <= 0.001f)
+        {
+            // La projection NavMesh peut corriger legerement la hauteur. La pose locale exacte
+            // n'est restauree qu'apres avoir parcouru l'integralite du chemin valide.
+            pose.child.localPosition = pose.localPosition;
+            pose.returnPath = null;
+        }
+
+        return direction;
     }
 
     void RotateFacingObjects(Vector3 direction)
@@ -313,34 +362,111 @@ public class PlayerMotionCampagne : MonoBehaviour
             if (hit.collider.transform == PlayerRoot || hit.collider.transform.IsChildOf(PlayerRoot))
                 continue;
 
-            targetPosition = hit.point;
-            // force target onto same Y as the object so movement stays on XZ plane
-            targetPosition.y = PlayerRoot.position.y;
-
-            // clamp to movement bounds
-            targetPosition.x = Mathf.Clamp(targetPosition.x, minX, maxX);
-            targetPosition.z = Mathf.Clamp(targetPosition.z, minZ, maxZ);
-
-            resettingFormation = false;
-            moving = true;
-            return;
+            if (TrySetDestination(hit.point))
+                return;
         }
 
         // Fallback: intersect with horizontal plane at object's Y
         Plane groundPlane = new Plane(Vector3.up, new Vector3(0f, PlayerRoot.position.y, 0f));
         if (groundPlane.Raycast(ray, out float enter))
         {
-            targetPosition = ray.GetPoint(enter);
-            // force target onto same Y as the object so movement stays on XZ plane
-            targetPosition.y = PlayerRoot.position.y;
-
-            // clamp to movement bounds
-            targetPosition.x = Mathf.Clamp(targetPosition.x, minX, maxX);
-            targetPosition.z = Mathf.Clamp(targetPosition.z, minZ, maxZ);
-
-            resettingFormation = false;
-            moving = true;
+            TrySetDestination(ray.GetPoint(enter));
         }
+    }
+
+    void InitializeNavigation()
+    {
+        if (!CampaignNavMeshRuntime.EnsureBuilt(PlayerRoot, navigationSourceLayers, clickProjectionRadius))
+            return;
+
+        if (!CampaignNavMeshRuntime.TrySample(PlayerRoot.position, clickProjectionRadius, out NavMeshHit startHit))
+            return;
+
+        // Positionne d'abord la racine sur la surface. Ajouter un agent hors NavMesh provoque sinon
+        // un avertissement et empeche SetDestination de fonctionner.
+        PlayerRoot.position = startHit.position;
+        navigationAgent = PlayerRoot.GetComponent<NavMeshAgent>();
+        if (navigationAgent == null)
+            navigationAgent = PlayerRoot.gameObject.AddComponent<NavMeshAgent>();
+
+        navigationAgent.updateRotation = false;
+        navigationAgent.updateUpAxis = true;
+        navigationAgent.speed = moveSpeed;
+        navigationAgent.acceleration = acceleration;
+        navigationAgent.angularSpeed = rotationSpeed;
+        navigationAgent.stoppingDistance = stoppingDistance;
+        navigationAgent.radius = navigationRadius;
+        navigationAgent.height = navigationHeight;
+        navigationAgent.autoBraking = true;
+
+        if (!navigationAgent.isOnNavMesh)
+            navigationAgent.Warp(startHit.position);
+    }
+
+    bool TrySetDestination(Vector3 requestedPosition)
+    {
+        if (navigationAgent == null || !navigationAgent.isOnNavMesh)
+        {
+            Debug.LogWarning("PlayerMotionCampagne: le NavMeshAgent n'est pas pret.", this);
+            return false;
+        }
+
+        requestedPosition.x = Mathf.Clamp(requestedPosition.x, minX, maxX);
+        requestedPosition.z = Mathf.Clamp(requestedPosition.z, minZ, maxZ);
+
+        if (!CampaignNavMeshRuntime.TrySample(requestedPosition, clickProjectionRadius, out NavMeshHit destinationHit))
+            return false;
+
+        if (!CampaignNavMeshRuntime.TryCalculateCompletePath(
+                navigationAgent.transform.position,
+                destinationHit.position,
+                clickProjectionRadius,
+                navigationAgent.areaMask,
+                out NavMeshPath path,
+                out Vector3 sampledDestination))
+        {
+            if (debugDrawTarget)
+                Debug.Log("PlayerMotionCampagne: destination inaccessible, deplacement ignore.", this);
+            return false;
+        }
+
+        targetPosition = sampledDestination;
+        resettingFormation = false;
+        navigationAgent.isStopped = false;
+        moving = navigationAgent.SetPath(path);
+        return moving;
+    }
+
+    void UpdateNavigationMovement()
+    {
+        if (!moving || navigationAgent == null || !navigationAgent.isOnNavMesh)
+            return;
+
+        navigationAgent.speed = moveSpeed;
+        navigationAgent.acceleration = acceleration;
+        navigationAgent.stoppingDistance = stoppingDistance;
+
+        Vector3 direction = navigationAgent.desiredVelocity;
+        direction.y = 0f;
+        RotateFacingObjects(direction);
+
+        if (navigationAgent.pathPending)
+            return;
+
+        if (!navigationAgent.hasPath || navigationAgent.remainingDistance <= stoppingDistance)
+        {
+            moving = false;
+            navigationAgent.ResetPath();
+        }
+    }
+
+    void StopNavigation()
+    {
+        if (navigationAgent == null || !navigationAgent.isOnNavMesh)
+            return;
+
+        navigationAgent.isStopped = true;
+        navigationAgent.ResetPath();
     }
 
     void OnDrawGizmos()
@@ -350,7 +476,16 @@ public class PlayerMotionCampagne : MonoBehaviour
         Gizmos.DrawWireSphere(targetPosition, 0.25f);
         if (moving)
         {
-            Gizmos.DrawLine(PlayerRoot.position, targetPosition);
+            if (navigationAgent != null && navigationAgent.hasPath)
+            {
+                Vector3[] corners = navigationAgent.path.corners;
+                for (int i = 1; i < corners.Length; i++)
+                    Gizmos.DrawLine(corners[i - 1], corners[i]);
+            }
+            else
+            {
+                Gizmos.DrawLine(PlayerRoot.position, targetPosition);
+            }
             // Draw forward marker
             Gizmos.color = Color.yellow;
             Gizmos.DrawLine(targetPosition, targetPosition + Vector3.up * 0.5f);

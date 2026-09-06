@@ -149,6 +149,8 @@ public class SceneTransitionTrigger : MonoBehaviour
     [SerializeField] private SceneAsset targetSceneAsset;
 #endif
     [SerializeField] private string targetSceneName;
+    [Tooltip("Compatibilite avec les anciennes zones: charge directement la scene au contact. Pour une rencontre, laisser decoche et utiliser CurlingEncounter.")]
+    [SerializeField] private bool loadDirectlyOnTrigger;
     [SerializeField] private bool triggerOnlyOnce = true;
     [SerializeField] private GameObject designatedObject;
     [SerializeField] private bool debugLogs = true;
@@ -163,6 +165,17 @@ public class SceneTransitionTrigger : MonoBehaviour
     [SerializeField, Min(1)] private int playerStoneCount = 3;
 
     private bool hasTriggered;
+
+    public AIOpponentProfile EnemyProfile => enemyProfile;
+
+    private void Awake()
+    {
+        // Migration des anciennes zones de combat : elles deviennent des rencontres volontaires
+        // sans imposer de modification manuelle des scenes existantes. Un CurlingEncounter deja
+        // configure dans l'Inspector (par exemple en mode Ambush) reste naturellement prioritaire.
+        if (!loadDirectlyOnTrigger && GetComponent<CurlingEncounter>() == null)
+            gameObject.AddComponent<CurlingEncounter>();
+    }
 
 #if UNITY_EDITOR
     private void OnValidate()
@@ -185,6 +198,9 @@ public class SceneTransitionTrigger : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
+        if (!loadDirectlyOnTrigger)
+            return;
+
         if (debugLogs)
         {
             Debug.Log($"SceneTransitionTrigger '{name}': OnTriggerEnter par '{other.gameObject.name}'.");
@@ -195,6 +211,9 @@ public class SceneTransitionTrigger : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D other)
     {
+        if (!loadDirectlyOnTrigger)
+            return;
+
         if (debugLogs)
         {
             Debug.Log($"SceneTransitionTrigger '{name}': OnTriggerEnter2D par '{other.gameObject.name}'.");
@@ -225,37 +244,7 @@ public class SceneTransitionTrigger : MonoBehaviour
             return;
         }
 
-        CampainManager manager = CampainManager.Instance;
-        if (manager == null)
-        {
-            Debug.LogWarning("SceneTransitionTrigger: CampainManager introuvable.");
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(targetSceneName))
-        {
-            Debug.LogWarning("SceneTransitionTrigger: targetSceneName est vide.");
-            return;
-        }
-
-        if (debugLogs)
-        {
-            Debug.Log($"SceneTransitionTrigger '{name}': tentative de chargement de la scene '{targetSceneName}'.");
-        }
-
-        SceneTransitionData data = BuildTransitionData(manager);
-        if (manager.LoadSceneWithPausedSource(targetSceneName, data))
-        {
-            hasTriggered = true;
-            if (debugLogs)
-            {
-                Debug.Log($"SceneTransitionTrigger '{name}': chargement de scene lance avec succes.");
-            }
-        }
-        else if (debugLogs)
-        {
-            Debug.LogWarning($"SceneTransitionTrigger '{name}': echec du chargement de scene '{targetSceneName}'. Regarde les warnings CampainManager.");
-        }
+        StartTransition();
     }
 
     private bool MatchesTriggerObject(GameObject other)
@@ -291,5 +280,43 @@ public class SceneTransitionTrigger : MonoBehaviour
         data.SetInventorySnapshot(manager.GetCharacterInventorySnapshot());
 
         return data;
+    }
+
+    /// <summary>Lance explicitement le match apres la resolution d'une rencontre ou d'un dialogue.</summary>
+    public bool StartTransition()
+    {
+        if (hasTriggered && triggerOnlyOnce)
+            return false;
+
+        CampainManager manager = CampainManager.Instance;
+        if (manager == null)
+        {
+            Debug.LogWarning("SceneTransitionTrigger: CampainManager introuvable.");
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(targetSceneName))
+        {
+            Debug.LogWarning("SceneTransitionTrigger: targetSceneName est vide.");
+            return false;
+        }
+
+        if (debugLogs)
+            Debug.Log($"SceneTransitionTrigger '{name}': tentative de chargement de la scene '{targetSceneName}'.");
+
+        SceneTransitionData data = BuildTransitionData(manager);
+        bool started = manager.LoadSceneWithPausedSource(targetSceneName, data);
+        if (started)
+        {
+            hasTriggered = true;
+            if (debugLogs)
+                Debug.Log($"SceneTransitionTrigger '{name}': chargement de scene lance avec succes.");
+        }
+        else if (debugLogs)
+        {
+            Debug.LogWarning($"SceneTransitionTrigger '{name}': echec du chargement de scene '{targetSceneName}'. Regarde les warnings CampainManager.");
+        }
+
+        return started;
     }
 }
